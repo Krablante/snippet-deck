@@ -11,6 +11,8 @@ This document covers public installation, builds, releases, and user-data recove
 
 Android accepts an in-place update only when the APK has the same application ID and signing certificate as the installed version.
 
+After installing a release with the built-in updater, future versions can be checked from **Settings → About → Check for updates**. The app also performs one silent metadata check on a normal launcher start when validated internet is available. APK download and installation remain user initiated.
+
 ## Local development build
 
 Requirements:
@@ -51,7 +53,8 @@ The `Release APK` workflow is started manually with a semantic version such as `
 1. Checks out the selected revision.
 2. Restores the release keystore from encrypted GitHub Actions secrets.
 3. Runs unit tests, lint, and the release build.
-4. Publishes `snippet-deck-v<version>.apk` under the matching `v<version>` tag.
+4. Verifies application ID, version name, APK signature validity, and the pinned release certificate.
+5. Publishes `snippet-deck-v<version>.apk` under the matching `v<version>` tag.
 
 Before starting the workflow:
 
@@ -66,6 +69,16 @@ After publication:
 - Confirm existing snippets and settings remain available.
 - Test one primary trigger, one alias, Backspace undo, and `!help`.
 - Export and re-import a backup on a disposable test installation.
+- Confirm the anonymous `releases/latest` API exposes the APK size and `sha256:` digest.
+- Use the previous official version to check, download, verify, and hand off the update to Android's installer.
+
+## Update troubleshooting
+
+- Automatic checks are intentionally silent; use the Settings action for a visible result.
+- A device that starts offline does not retry in the background. Check manually after connectivity returns.
+- Android may require one-time **Install unknown apps** permission for SnippetDeck before opening the installer.
+- Debug and unofficial package IDs cannot use the official self-updater.
+- A missing digest, wrong asset name, changed signing key, non-increasing version code, or malformed version fails closed before installation.
 
 ## Backup and recovery
 

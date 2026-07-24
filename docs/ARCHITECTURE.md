@@ -19,11 +19,11 @@ Compose UI ──► SnippetRepository ──► Room database
     │                 │
     │                 └────────────► accessibility cache
     │                                      │
-    └──► backup/import UI                  ▼
-                               TextExpansionService
-                                         │
-                                         ▼
-                                  editable field
+    ├──► backup/import UI                  ▼
+    └──► UpdateViewModel       TextExpansionService
+              │                          │
+              ▼                          ▼
+       GitHub Releases API        editable field
 ```
 
 ## Text expansion
@@ -55,7 +55,7 @@ A complete restore validates the input and then replaces the library in one Room
 
 ## Compose UI
 
-The Compose interface provides snippet editing, search, enabled state, accessibility onboarding, theme selection, and backup and transfer. Import always previews the source and snippet count and warns that the current library will be replaced.
+The Compose interface provides snippet editing, search, enabled state, accessibility onboarding, theme selection, backup and transfer, and manual update checks. Import always previews the source and snippet count and warns that the current library will be replaced.
 
 UI state is owned by view models and repositories rather than composables. Platform actions such as document selection and clipboard access remain at the UI boundary.
 
@@ -71,9 +71,24 @@ UI state is owned by view models and repositories rather than composables. Platf
 
 `ImportExportManager` reads and writes content URIs with strict size limits. Clipboard interaction stays in the UI layer.
 
+## Application updates
+
+The updater is deliberately small and separate from snippet storage:
+
+- `UpdateViewModel` owns check, download, permission, and presentation state.
+- `GitHubReleaseUpdater` makes one `releases/latest` request, downloads the selected APK, and verifies it.
+- `UpdateInstaller` grants a temporary `FileProvider` URI to Android's package installer.
+- `UpdateDialog` is shown only for an available update, active download, install permission, or download failure.
+
+A normal launcher start performs at most one silent metadata check per activity/view-model lifetime, and only when Android reports a validated internet connection. Automatic current/offline/error results remain invisible. Manual checks use the same request and report their result in Settings. `PROCESS_TEXT` launches do not check for updates, and there is no worker, polling loop, account, or backend.
+
+APK download starts only after explicit confirmation. Acceptance requires the exact `snippet-deck-v<version>.apk` asset, a valid GitHub SHA-256 digest, the official application ID, matching semantic version, increasing version code, and the pinned release-signing certificate. Android still shows its own installation confirmation.
+
 ## Security and privacy boundaries
 
-- The app has no network permission or background network process.
+- Network access is limited to public GitHub release metadata and a user-approved APK download.
+- Snippets, observed text, settings, and backups are never sent with update requests.
+- There is no background network worker, polling process, data sync, or silent installation.
 - Observed editable text is not persisted or transmitted.
 - Export occurs only after explicit user action.
 - File and clipboard backups contain user data and must be treated as sensitive.
@@ -87,6 +102,7 @@ The following identifiers are retained so updates preserve installed state:
 - Room database name and schema migrations.
 - Preferences filenames and stored keys.
 - Android release signing identity.
+- GitHub release asset naming and SHA-256 metadata required by the updater.
 - Current and documented legacy backup formats.
 
 Changing one of these requires an explicit migration and upgrade test. Historical identifiers are compatibility details, not current product branding.

@@ -52,7 +52,8 @@ Create a snippet  →  type !today + Space  →  SnippetDeck inserts the expansi
 - Date and time placeholders such as `{{date}}`, `{{time}}`, `{{year_short}}`, and `{{week_num}}`.
 - Enabled and disabled snippets, search, and light, dark, or system themes.
 - Portable JSON files and compact text backups for moving a library between devices.
-- Fully local storage with no account, backend, analytics, or network permission.
+- Fully local snippet storage with no account, backend, analytics, advertising, or data sync.
+- Quiet GitHub release checks and verified in-app APK updates.
 
 ## Install
 
@@ -62,6 +63,18 @@ SnippetDeck requires Android 13 or newer.
 2. Install the APK. Android may ask you to allow installation from your browser or file manager.
 3. If Android blocks the accessibility service for a sideloaded app, open **App info → menu → Allow restricted settings**.
 4. Open SnippetDeck and enable its accessibility service.
+
+## Updates
+
+On a normal app launch, SnippetDeck makes one quiet request to the public GitHub Releases API when Android reports a validated internet connection. Nothing is shown when the installed version is current, the device is offline, or the automatic check fails.
+
+You can also open **Settings → About → Check for updates** at any time. Downloading and installation always require an explicit tap. Before Android opens its package installer, SnippetDeck verifies:
+
+- The exact versioned APK asset and GitHub-provided SHA-256 digest.
+- The application ID, version name, and increasing version code.
+- The official SnippetDeck signing certificate.
+
+There is no background polling or automatic installation. Contextual `PROCESS_TEXT` launches never trigger an update check.
 
 ## Use
 
@@ -91,8 +104,9 @@ Both formats preserve triggers, aliases, expansions, enabled state, and timestam
 SnippetDeck uses Android's accessibility API only to detect triggers and replace text in editable fields. Observed field content is not stored or transmitted.
 
 - Snippets and settings stay in the app's local Room database.
-- Data leaves the app only when you explicitly export or copy a backup.
-- The app has no network permission, account system, analytics, advertising, or remote-control component.
+- Snippet content leaves the app only when you explicitly export or copy a backup.
+- Network access is limited to GitHub release metadata and an APK download you explicitly approve. Snippets, observed text, settings, and backups are never included in those requests.
+- There is no account system, analytics, advertising, remote-control component, background updater, or data-sync service.
 - Official updates must keep the same Android signing identity so they can be installed over an existing version without clearing local data.
 
 ## Build from source
@@ -116,10 +130,10 @@ See [Contributing](CONTRIBUTING.md) for development expectations and [Operations
 ## Architecture
 
 ```text
-Compose editor ──► Room snippets database ──► AccessibilityService
-       │                                             │
-       └──── file/text backup codec                  ▼
-                                          editable field expansion
+Compose editor ──► Room database ──► AccessibilityService ──► editable field
+       │
+       ├─────────► file/text backup codec
+       └─────────► GitHub release updater ──► Android installer
 ```
 
 See [Architecture](docs/ARCHITECTURE.md) for component boundaries, data formats, and compatibility contracts.

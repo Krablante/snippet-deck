@@ -15,8 +15,8 @@ android {
         applicationId = "com.rrajath.expander"
         minSdk = 33
         targetSdk = 36
-        versionCode = 10401
-        versionName = "1.4.1"
+        versionCode = 10500
+        versionName = "1.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -106,6 +106,7 @@ dependencies {
     implementation(libs.gson)
 
     testImplementation(libs.junit)
+    testImplementation("org.json:json:20240303")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

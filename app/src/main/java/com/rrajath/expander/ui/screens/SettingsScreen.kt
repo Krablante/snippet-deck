@@ -17,18 +17,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.rrajath.expander.service.TextExpansionService
+import com.rrajath.expander.update.UpdateUiState
+import com.rrajath.expander.update.updateStatusText
 import com.rrajath.expander.util.ThemeMode
 import com.rrajath.expander.util.ThemePreferences
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(
+internal fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onExportClick: () -> Unit,
     onImportClick: () -> Unit,
     onCopyTextClick: () -> Unit,
     onImportText: (String) -> Unit,
     onThemeChanged: () -> Unit = {},
+    updateState: UpdateUiState = UpdateUiState.Idle,
+    onCheckForUpdates: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -223,28 +227,87 @@ fun SettingsScreen(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
                 )
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = "SnippetDeck",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "Version $versionName",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "A text expansion tool that works system-wide using accessibility services.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                Column {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "SnippetDeck",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Version $versionName",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "A text expansion tool that works system-wide using accessibility services.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    HorizontalDivider()
+                    UpdateSettingsAction(
+                        state = updateState,
+                        installedVersion = versionName,
+                        onClick = onCheckForUpdates,
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun UpdateSettingsAction(
+    state: UpdateUiState,
+    installedVersion: String,
+    onClick: () -> Unit,
+) {
+    val enabled = state !is UpdateUiState.Checking &&
+        state !is UpdateUiState.Downloading &&
+        state !is UpdateUiState.UnsupportedBuild
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(
+            color = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            shape = MaterialTheme.shapes.small,
+        ) {
+            Text(
+                text = "GITHUB",
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Check for updates",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+                text = updateStatusText(state, installedVersion),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+            )
+        }
+        if (state is UpdateUiState.Checking || state is UpdateUiState.Downloading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(22.dp),
+                strokeWidth = 2.dp,
+            )
         }
     }
 }

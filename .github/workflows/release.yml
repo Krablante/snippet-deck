@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag, for example v1.4.1
+        description: Release tag, for example v1.5.0
         required: true
         type: string
 
@@ -38,6 +38,24 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew testDebugUnitTest lintDebug assembleRelease --stacktrace --no-daemon --max-workers=2
+
+      - name: Verify update compatibility
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          EXPECTED_SIGNER_SHA256: 627216136dc143c9a2d4d4cc0851441e46753fc1ecd30548e25f5ebe15ae358d
+        run: |
+          APK="app/build/outputs/apk/release/app-release.apk"
+          APKANALYZER="$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer"
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)
+          EXPECTED_VERSION="${INPUT_TAG#v}"
+
+          test -f "$APK"
+          test "$(bash "$APKANALYZER" manifest application-id "$APK")" = "com.rrajath.expander"
+          test "$(bash "$APKANALYZER" manifest version-name "$APK")" = "$EXPECTED_VERSION"
+          "$APKSIGNER" verify --verbose "$APK"
+
+          ACTUAL_SIGNER_SHA256=$("$APKSIGNER" verify --print-certs "$APK" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}')
+          test "$ACTUAL_SIGNER_SHA256" = "$EXPECTED_SIGNER_SHA256"
 
       - name: Prepare artifact
         run: cp app/build/outputs/apk/release/app-release.apk snippet-deck-${{ inputs.tag }}.apk

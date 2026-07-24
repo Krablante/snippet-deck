@@ -24,13 +24,15 @@ Debug builds use the `.debug` application ID suffix and can be installed alongsi
 - Treat the application ID, package namespace, Room database name, preferences filenames, and release signing identity as compatibility contracts.
 - Add explicit Room migrations for schema changes and tests for every supported upgrade path.
 - Preserve current and legacy backup compatibility unless a documented migration path is provided.
+- Keep update networking limited to the public GitHub latest-release request and an explicitly approved APK download. Do not add embedded tokens, background polling, silent installation, or snippet-data transmission.
+- Preserve the exact release asset name, semantic version, increasing version code, package ID, SHA-256 verification, and pinned signing identity required by installed updates.
 - Do not commit SDK paths, keystores, credentials, APKs, exported backups, device data, or local agent/editor state.
 
 ## Tests
 
 Choose the narrowest useful test and keep the full verification command green.
 
-- Unit tests cover snippet validation, aliases, placeholders, backup codecs, and import semantics.
+- Unit tests cover snippet validation, aliases, placeholders, backup codecs, import semantics, release parsing, semantic versions, digest checks, and update presentation.
 - Instrumented tests cover Android-specific behavior and Compose flows.
 - Changes to accessibility expansion should also be exercised manually in more than one editable target because apps expose accessibility nodes differently.
 - Changes to backup or database formats require round-trip and migration coverage.

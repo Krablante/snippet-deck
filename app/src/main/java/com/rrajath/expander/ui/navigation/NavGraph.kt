@@ -24,6 +24,7 @@ import com.rrajath.expander.ui.SnippetViewModel
 import com.rrajath.expander.ui.screens.AddEditSnippetScreen
 import com.rrajath.expander.ui.screens.SettingsScreen
 import com.rrajath.expander.ui.screens.SnippetListScreen
+import com.rrajath.expander.update.UpdateUiState
 import com.rrajath.expander.util.ImportExportManager
 import com.rrajath.expander.util.SnippetBackupCodec
 import com.rrajath.expander.domain.TriggerUtils
@@ -53,9 +54,11 @@ private data class PendingImport(
 )
 
 @Composable
-fun NavGraph(
+internal fun NavGraph(
     navController: NavHostController,
     initialExpansion: String? = null,
+    updateState: UpdateUiState,
+    onCheckForUpdates: () -> Unit,
     viewModel: SnippetViewModel = viewModel()
 ) {
     // Navigate to Add Snippet when launched via ACTION_PROCESS_TEXT.
@@ -240,6 +243,8 @@ fun NavGraph(
 
         composable(Screen.Settings.route) {
             SettingsScreen(
+                updateState = updateState,
+                onCheckForUpdates = onCheckForUpdates,
                 onNavigateBack = {
                     navController.popBackStack()
                 },
