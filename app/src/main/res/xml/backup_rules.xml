@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Include shared preferences for backup -->
+    <include domain="sharedpref" path="expander_prefs.xml"/>
+
+    <!-- Include database for snippets backup -->
+    <include domain="database" path="snippet_database"/>
+</full-backup-content>

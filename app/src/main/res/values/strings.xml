@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">SnippetDeck</string>
+    <string name="create_shortcut_menu_label">Create a Shortcut</string>
+    <string name="accessibility_service_description">SnippetDeck monitors editable text to replace your configured shortcuts. Expansion and storage stay entirely on this device.</string>
+</resources>
