@@ -54,8 +54,12 @@ jobs:
           test "$(bash "$APKANALYZER" manifest version-name "$APK")" = "$EXPECTED_VERSION"
           "$APKSIGNER" verify --verbose "$APK"
 
-          ACTUAL_SIGNER_SHA256=$("$APKSIGNER" verify --print-certs "$APK" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}')
-          test "$ACTUAL_SIGNER_SHA256" = "$EXPECTED_SIGNER_SHA256"
+          ACTUAL_SIGNER_SHA256=$("$APKSIGNER" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr '[:upper:]' '[:lower:]' | tr -d '\r\n')
+          test -n "$ACTUAL_SIGNER_SHA256"
+          if [ "$ACTUAL_SIGNER_SHA256" != "$EXPECTED_SIGNER_SHA256" ]; then
+            echo "::error::Release signer mismatch: $ACTUAL_SIGNER_SHA256"
+            exit 1
+          fi
 
       - name: Prepare artifact
         run: cp app/build/outputs/apk/release/app-release.apk snippet-deck-${{ inputs.tag }}.apk
