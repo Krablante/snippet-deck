@@ -4,9 +4,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.provider.Settings
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -14,9 +18,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.rrajath.expander.service.TextExpansionService
+import com.rrajath.expander.ui.theme.snippetDeckColors
 import com.rrajath.expander.update.UpdateUiState
 import com.rrajath.expander.update.updateStatusText
 import com.rrajath.expander.util.ThemeMode
@@ -160,9 +166,9 @@ internal fun SettingsScreen(
             SettingsItem(
                 title = "Theme",
                 subtitle = when (currentTheme) {
-                    ThemeMode.LIGHT -> "Light"
-                    ThemeMode.DARK -> "Dark"
-                    ThemeMode.SYSTEM -> "System default"
+                    ThemeMode.WHITE -> "White"
+                    ThemeMode.BLACK -> "Black"
+                    ThemeMode.SEPIA -> "Sepia Paper"
                 },
                 onClick = { showThemeDialog = true }
             )
@@ -464,22 +470,14 @@ fun ThemeSelectionDialog(
         onDismissRequest = onDismiss,
         title = { Text("Choose Theme") },
         text = {
-            Column {
-                ThemeOption(
-                    title = "Light",
-                    selected = currentTheme == ThemeMode.LIGHT,
-                    onClick = { onThemeSelected(ThemeMode.LIGHT) }
-                )
-                ThemeOption(
-                    title = "Dark",
-                    selected = currentTheme == ThemeMode.DARK,
-                    onClick = { onThemeSelected(ThemeMode.DARK) }
-                )
-                ThemeOption(
-                    title = "System default",
-                    selected = currentTheme == ThemeMode.SYSTEM,
-                    onClick = { onThemeSelected(ThemeMode.SYSTEM) }
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ThemeMode.entries.forEach { theme ->
+                    ThemeOption(
+                        theme = theme,
+                        selected = currentTheme == theme,
+                        onClick = { onThemeSelected(theme) },
+                    )
+                }
             }
         },
         confirmButton = {
@@ -492,25 +490,69 @@ fun ThemeSelectionDialog(
 
 @Composable
 fun ThemeOption(
-    title: String,
+    theme: ThemeMode,
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    Row(
+    val preview = snippetDeckColors(theme)
+    val (title, description) = when (theme) {
+        ThemeMode.WHITE -> "White" to "Clean neutral canvas"
+        ThemeMode.BLACK -> "Black" to "Deep low-light palette"
+        ThemeMode.SEPIA -> "Sepia Paper" to "Warm book-like paper"
+    }
+    Surface(
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+        ),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clickable(onClick = onClick),
     ) {
-        RadioButton(
-            selected = selected,
-            onClick = onClick
-        )
-        Spacer(modifier = Modifier.width(16.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyLarge
-        )
+        Row(
+            modifier = Modifier.padding(start = 10.dp, top = 9.dp, end = 4.dp, bottom = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(width = 48.dp, height = 34.dp)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(preview.canvas),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 31.dp, height = 19.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(preview.surface),
+                )
+                Box(
+                    modifier = Modifier
+                        .padding(end = 5.dp, bottom = 4.dp)
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(preview.accent)
+                        .align(Alignment.BottomEnd),
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 10.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            RadioButton(selected = selected, onClick = null)
+        }
     }
 }

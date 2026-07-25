@@ -26,6 +26,7 @@ Debug builds use the `.debug` application ID suffix and can be installed alongsi
 - Preserve current and legacy backup compatibility unless a documented migration path is provided.
 - Keep update networking limited to the public GitHub latest-release request and an explicitly approved APK download. Do not add embedded tokens, background polling, silent installation, or snippet-data transmission.
 - Preserve the exact release asset name, semantic version, increasing version code, package ID, SHA-256 verification, and pinned signing identity required by installed updates.
+- Keep White, Black, and Sepia deterministic; do not re-enable wallpaper-derived dynamic colors. New UI must remain legible in all three palettes and preserve migration of legacy Light/Dark/System values.
 - Do not commit SDK paths, keystores, credentials, APKs, exported backups, device data, or local agent/editor state.
 
 ## Tests

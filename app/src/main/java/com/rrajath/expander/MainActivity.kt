@@ -6,15 +6,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
+import androidx.core.view.WindowCompat
 import androidx.navigation.compose.rememberNavController
 import com.rrajath.expander.ui.components.UpdateDialog
 import com.rrajath.expander.ui.navigation.NavGraph
 import com.rrajath.expander.ui.theme.SnippetDeckTheme
 import com.rrajath.expander.update.UpdateViewModel
 import com.rrajath.expander.util.ProcessTextHelper
-import com.rrajath.expander.util.ThemeMode
 import com.rrajath.expander.util.ThemePreferences
 
 class MainActivity : ComponentActivity() {
@@ -33,7 +32,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             val themeMode by ThemePreferences.themeMode.collectAsState()
             val updateState by updateViewModel.state.collectAsState()
-            val systemInDarkTheme = isSystemInDarkTheme()
 
             LaunchedEffect(intent?.action) {
                 if (intent?.action == Intent.ACTION_MAIN) {
@@ -41,13 +39,15 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            val darkTheme = when (themeMode) {
-                ThemeMode.LIGHT -> false
-                ThemeMode.DARK -> true
-                ThemeMode.SYSTEM -> systemInDarkTheme
+            SideEffect {
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    val lightSystemBars = !themeMode.isDark
+                    isAppearanceLightStatusBars = lightSystemBars
+                    isAppearanceLightNavigationBars = lightSystemBars
+                }
             }
 
-            SnippetDeckTheme(darkTheme = darkTheme) {
+            SnippetDeckTheme(themeMode = themeMode) {
                 val navController = rememberNavController()
                 NavGraph(
                     navController = navController,

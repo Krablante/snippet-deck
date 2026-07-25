@@ -23,17 +23,17 @@ Type a trigger such as `!review`, press Space, and SnippetDeck replaces it immed
   <tr>
     <td width="33%" align="center">
       <img src="docs/images/snippet-library.png" width="260" alt="SnippetDeck library with example snippets">
-      <br><strong>Build your library</strong>
+      <br><strong>White · Build your library</strong>
       <br><sub>Keep triggers, aliases, and expansions easy to scan.</sub>
     </td>
     <td width="33%" align="center">
       <img src="docs/images/snippet-editor.png" width="260" alt="SnippetDeck editor with a date placeholder">
-      <br><strong>Create flexible snippets</strong>
+      <br><strong>Sepia · Create flexible snippets</strong>
       <br><sub>Add plain aliases and dynamic values such as <code>{{date}}</code>.</sub>
     </td>
     <td width="33%" align="center">
       <img src="docs/images/settings-backup.png" width="260" alt="SnippetDeck settings and backup actions">
-      <br><strong>Stay in control</strong>
+      <br><strong>Black · Stay in control</strong>
       <br><sub>Manage the service, appearance, and portable backups.</sub>
     </td>
   </tr>
@@ -50,7 +50,7 @@ Create a snippet  →  type !today + Space  →  SnippetDeck inserts the expansi
 - Immediate Backspace undo after an expansion.
 - Dynamic `!help` generated from enabled snippets.
 - Date and time placeholders such as `{{date}}`, `{{time}}`, `{{year_short}}`, and `{{week_num}}`.
-- A compact, searchable snippet library with enabled state and light, dark, or system themes.
+- A compact, searchable snippet library with enabled state and White, Black, or Sepia themes.
 - Portable JSON files and compact text backups for moving a library between devices.
 - Fully local snippet storage with no account, backend, analytics, advertising, or data sync.
 - Quiet GitHub release checks and verified in-app APK updates.
@@ -84,6 +84,16 @@ There is no background polling or automatic installation. Contextual `PROCESS_TE
 4. Press Backspace immediately after an expansion to restore the trigger where supported by the target app.
 
 Typing `!help` followed by Space produces a compact list of enabled snippets.
+
+## Appearance
+
+SnippetDeck includes three stable palettes that do not inherit wallpaper colors:
+
+- **White** — a clean neutral canvas with restrained green actions.
+- **Black** — Textory's deep low-light palette with high-contrast text.
+- **Sepia Paper** — a warm book-like canvas with a brown accent.
+
+Existing Light and Dark preferences migrate to White and Black. A legacy System preference resolves once to White or Black using the device mode active during migration.
 
 ## Backup and transfer
 
