@@ -50,7 +50,7 @@ Create a snippet  →  type !today + Space  →  SnippetDeck inserts the expansi
 - Immediate Backspace undo after an expansion.
 - Dynamic `!help` generated from enabled snippets.
 - Date and time placeholders such as `{{date}}`, `{{time}}`, `{{year_short}}`, and `{{week_num}}`.
-- Enabled and disabled snippets, search, and light, dark, or system themes.
+- A compact, searchable snippet library with enabled state and light, dark, or system themes.
 - Portable JSON files and compact text backups for moving a library between devices.
 - Fully local snippet storage with no account, backend, analytics, advertising, or data sync.
 - Quiet GitHub release checks and verified in-app APK updates.

@@ -77,7 +77,7 @@ fun SnippetListScreen(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 12.dp)
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -134,7 +134,7 @@ fun SnippetListScreen(
                 onQueryChange = onSearchQueryChange
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             if (snippets.isEmpty()) {
                 EmptyState(
@@ -155,7 +155,7 @@ fun SnippetListScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(
                         items = snippets,
@@ -171,7 +171,7 @@ fun SnippetListScreen(
 
                     // Bottom spacing for FAB
                     item {
-                        Spacer(modifier = Modifier.height(80.dp))
+                        Spacer(modifier = Modifier.height(72.dp))
                     }
                 }
             }
@@ -231,7 +231,7 @@ fun SnippetItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(
@@ -243,13 +243,15 @@ fun SnippetItem(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(14.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = snippet.trigger,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         color = if (snippet.isEnabled) {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         } else {
@@ -258,23 +260,23 @@ fun SnippetItem(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
                 if (snippet.aliases.isNotEmpty()) {
                     Text(
                         text = "Aliases: ${snippet.aliases.joinToString()}",
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.secondary,
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
                 }
 
                 Text(
                     text = snippet.expansion,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     color = if (snippet.isEnabled) {
                         MaterialTheme.colorScheme.onSurfaceVariant
@@ -284,7 +286,7 @@ fun SnippetItem(
                 )
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
 
             Switch(
                 checked = snippet.isEnabled,
