@@ -4,12 +4,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.provider.Settings
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -18,9 +16,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.rrajath.expander.service.TextExpansionService
 import com.rrajath.expander.sync.SyncUiState
 import com.rrajath.expander.ui.theme.snippetDeckColors
@@ -52,7 +52,15 @@ internal fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var serviceEnabled by remember { mutableStateOf(TextExpansionService.isServiceEnabled(context)) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) serviceEnabled = TextExpansionService.isServiceEnabled(context)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     var currentTheme by remember { mutableStateOf(ThemePreferences.getThemeMode(context)) }
     var showThemeDialog by remember { mutableStateOf(false) }
     var showTextImportDialog by remember { mutableStateOf(false) }
@@ -141,6 +149,7 @@ internal fun SettingsScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Settings") },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
@@ -156,214 +165,90 @@ internal fun SettingsScreen(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
+                .background(MaterialTheme.colorScheme.background)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Service Status Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "Service Status",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Enable Text Expansion",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Text(
-                                text = if (serviceEnabled) "Service is active" else "Service is disabled",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                            )
-                        }
-                        Switch(
-                            checked = serviceEnabled,
-                            onCheckedChange = {
-                                serviceEnabled = it
-                                TextExpansionService.setServiceEnabled(context, it)
-                            }
-                        )
-                    }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Text expansion", style = MaterialTheme.typography.bodyLarge)
+                    Text(if (serviceEnabled) "On" else "Paused", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                Switch(checked = serviceEnabled, onCheckedChange = {
+                    serviceEnabled = it
+                    TextExpansionService.setServiceEnabled(context, it)
+                })
             }
-
-            // Accessibility Settings
             SettingsItem(
                 title = "Accessibility Settings",
-                subtitle = "Grant accessibility permission",
+                subtitle = "System permission",
                 onClick = {
                     val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
                     context.startActivity(intent)
                 }
             )
-
-            HorizontalDivider()
-
-            // Appearance Section
-            Text(
-                text = "Appearance",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
+            SettingsSection("Appearance")
             SettingsItem(
                 title = "Theme",
                 subtitle = when (currentTheme) {
-                    ThemeMode.WHITE -> "White"
-                    ThemeMode.BLACK -> "Black"
-                    ThemeMode.SEPIA -> "Sepia Paper"
+                    ThemeMode.WHITE -> "Chalk"
+                    ThemeMode.BLACK -> "Ink"
+                    ThemeMode.SEPIA -> "Parchment"
                 },
                 onClick = { showThemeDialog = true }
             )
-
-            HorizontalDivider()
-
-            Text("Google Drive sync", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Keep snippets on this device and sync through your Google account. Cloud copies are readable by Google. Changes on another device appear when you open SnippetDeck or tap Sync now.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(when (syncState) {
-                        SyncUiState.Off -> "Not connected"
-                        SyncUiState.Ready -> "Connected · waiting to sync"
-                        SyncUiState.Working -> "Syncing…"
-                        is SyncUiState.Synced -> "Up to date · ${syncState.count} snippets"
-                        is SyncUiState.Conflict -> "Conflicting edits: ${syncState.triggers.joinToString()}"
-                        is SyncUiState.Failed -> "Sync failed: ${syncState.message}"
-                    }, style = MaterialTheme.typography.bodyMedium)
-                    Button(onClick = onSync, enabled = syncState != SyncUiState.Working) {
-                        Text(if (syncConnected) "Sync now" else "Connect Google Drive")
-                    }
-                    if (syncConnected) {
-                        TextButton(onClick = { showReplaceCloudDialog = true }, enabled = syncState != SyncUiState.Working) {
-                            Text("Use this device's library in cloud")
-                        }
-                        TextButton(onClick = { showUseOtherDialog = true }, enabled = syncState != SyncUiState.Working) {
-                            Text("Use other device's library")
-                        }
-                        TextButton(onClick = onDisconnectSync, enabled = syncState != SyncUiState.Working) {
-                            Text("Disconnect on this device")
-                        }
-                    }
-                    if (syncHasHistory) {
-                        TextButton(onClick = { showResetSyncDialog = true }, enabled = syncState != SyncUiState.Working) {
-                            Text("Switch Google account…")
-                        }
-                    }
-                }
-            }
-
-            HorizontalDivider()
-
-            // Import/Export Section
-            Text(
-                text = "Backup & transfer",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            Text(
-                text = "Move the complete library between phones. Import replaces local snippets after confirmation.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Card(modifier = Modifier.fillMaxWidth()) {
-                BackupAction(
-                    badge = "FILE",
-                    title = "Export backup file",
-                    subtitle = "Readable JSON for long-term storage",
-                    onClick = onExportClick
-                )
-                HorizontalDivider()
-                BackupAction(
-                    badge = "FILE",
-                    title = "Import backup file",
-                    subtitle = "Restore JSON exported by SnippetDeck",
-                    onClick = onImportClick
-                )
-                HorizontalDivider()
-                BackupAction(
-                    badge = "TEXT",
-                    title = "Copy backup text",
-                    subtitle = "Compact text for Saved Messages or notes",
-                    onClick = onCopyTextClick
-                )
-                HorizontalDivider()
-                BackupAction(
-                    badge = "TEXT",
-                    title = "Paste backup text",
-                    subtitle = "Restore text copied from another phone",
-                    onClick = { showTextImportDialog = true }
-                )
-            }
-
-            HorizontalDivider()
-
-            // About Section
-            Text(
-                text = "About",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
+            SettingsSection("Google Drive")
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = "SnippetDeck",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "Version $versionName",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "A text expansion tool that works system-wide using accessibility services.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    HorizontalDivider()
-                    UpdateSettingsAction(
-                        state = updateState,
-                        installedVersion = versionName,
-                        onClick = onCheckForUpdates,
-                    )
+                Text(when (syncState) {
+                    SyncUiState.Off -> "Not connected"
+                    SyncUiState.Ready -> "Connected"
+                    SyncUiState.Working -> "Syncing…"
+                    is SyncUiState.Synced -> "Up to date · ${syncState.count} snippets"
+                    is SyncUiState.Conflict -> "Conflicts: ${syncState.triggers.joinToString()}"
+                    is SyncUiState.Failed -> "Sync failed: ${syncState.message}"
+                }, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                Button(onClick = onSync, enabled = syncState != SyncUiState.Working) {
+                    Text(if (syncConnected) "Sync now" else "Connect")
                 }
             }
+            if (!syncConnected) {
+                Text("Optional · your snippets in Google Drive are readable by Google", modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (syncState is SyncUiState.Conflict) {
+                SettingsItem("Use this device's library", "Resolve conflicting edits", { showReplaceCloudDialog = true })
+                SettingsItem("Use other device's library", "Replace this device's copy", { showUseOtherDialog = true })
+            }
+            if (syncConnected) SettingsItem("Disconnect Google Drive", "Keep snippets on this device", onDisconnectSync)
+            if (syncHasHistory) SettingsItem("Switch Google account", "Clear this device's sync history", { showResetSyncDialog = true })
+
+            SettingsSection("Backup & transfer")
+            SettingsItem("Export backup file", "JSON", onExportClick)
+            SettingsItem("Import backup file", "Replaces the library after confirmation", onImportClick)
+            SettingsItem("Copy backup text", "For notes or messages", onCopyTextClick)
+            SettingsItem("Paste backup text", "Replaces the library after confirmation", { showTextImportDialog = true })
+
+            SettingsSection("About")
+            Text("SnippetDeck · $versionName", modifier = Modifier.padding(start = 20.dp, top = 12.dp), style = MaterialTheme.typography.bodyMedium)
+            UpdateSettingsAction(state = updateState, installedVersion = versionName, onClick = onCheckForUpdates)
+            Spacer(Modifier.height(24.dp))
         }
     }
+}
+
+@Composable
+private fun SettingsSection(title: String) {
+    HorizontalDivider(modifier = Modifier.padding(top = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+    Text(
+        title,
+        modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 5.dp),
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
@@ -384,22 +269,11 @@ private fun UpdateSettingsAction(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Surface(
-            color = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            shape = MaterialTheme.shapes.small,
-        ) {
-            Text(
-                text = "GITHUB",
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                style = MaterialTheme.typography.labelSmall,
-            )
-        }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = "Check for updates",
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(modifier = Modifier.height(3.dp))
             Text(
@@ -412,48 +286,6 @@ private fun UpdateSettingsAction(
             CircularProgressIndicator(
                 modifier = Modifier.size(22.dp),
                 strokeWidth = 2.dp,
-            )
-        }
-    }
-}
-
-@Composable
-private fun BackupAction(
-    badge: String,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            shape = MaterialTheme.shapes.small
-        ) {
-            Text(
-                text = badge,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                style = MaterialTheme.typography.labelSmall
-            )
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(3.dp))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -534,16 +366,10 @@ fun SettingsItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        color = MaterialTheme.colorScheme.surface
+    Column(
+        modifier = modifier.fillMaxWidth().clickable(onClick = onClick)
+            .padding(vertical = 11.dp, horizontal = 20.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .padding(vertical = 12.dp, horizontal = 4.dp)
-        ) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge,
@@ -555,7 +381,6 @@ fun SettingsItem(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-        }
     }
 }
 
@@ -595,46 +420,24 @@ fun ThemeOption(
 ) {
     val preview = snippetDeckColors(theme)
     val (title, description) = when (theme) {
-        ThemeMode.WHITE -> "White" to "Clean neutral canvas"
-        ThemeMode.BLACK -> "Black" to "Deep low-light palette"
-        ThemeMode.SEPIA -> "Sepia Paper" to "Warm book-like paper"
+        ThemeMode.WHITE -> "Chalk" to "Warm and light"
+        ThemeMode.BLACK -> "Ink" to "Quiet and dark"
+        ThemeMode.SEPIA -> "Parchment" to "Soft and earthy"
     }
     Surface(
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-        ),
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 54.dp)
             .clickable(onClick = onClick),
     ) {
         Row(
             modifier = Modifier.padding(start = 10.dp, top = 9.dp, end = 4.dp, bottom = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(width = 48.dp, height = 34.dp)
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(preview.canvas),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(width = 31.dp, height = 19.dp)
-                        .clip(RoundedCornerShape(5.dp))
-                        .background(preview.surface),
-                )
-                Box(
-                    modifier = Modifier
-                        .padding(end = 5.dp, bottom = 4.dp)
-                        .size(7.dp)
-                        .clip(CircleShape)
-                        .background(preview.accent)
-                        .align(Alignment.BottomEnd),
-                )
+            Surface(color = preview.canvas, shape = RoundedCornerShape(9.dp)) {
+                Box(modifier = Modifier.size(width = 48.dp, height = 34.dp).padding(10.dp).background(preview.accent, RoundedCornerShape(5.dp)))
             }
             Column(
                 modifier = Modifier

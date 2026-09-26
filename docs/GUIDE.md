@@ -1,4 +1,4 @@
-![Guide](https://img.shields.io/badge/Category-Guide-47795e) [![EN](https://img.shields.io/badge/Language-EN-47795e)](GUIDE.md) [![RU](https://img.shields.io/badge/Language-RU-806d5e)](ru/GUIDE.md)
+![Guide](https://img.shields.io/badge/Category-Guide-505477) [![EN](https://img.shields.io/badge/Language-EN-505477)](GUIDE.md) [![RU](https://img.shields.io/badge/Language-RU-714857)](ru/GUIDE.md)
 
 # Use SnippetDeck
 

@@ -1,4 +1,4 @@
-![Privacy](https://img.shields.io/badge/Category-Privacy-47795e) [![EN](https://img.shields.io/badge/Language-EN-47795e)](PRIVACY.md) [![RU](https://img.shields.io/badge/Language-RU-806d5e)](docs/ru/PRIVACY.md)
+![Privacy](https://img.shields.io/badge/Category-Privacy-505477) [![EN](https://img.shields.io/badge/Language-EN-505477)](PRIVACY.md) [![RU](https://img.shields.io/badge/Language-RU-714857)](docs/ru/PRIVACY.md)
 
 # SnippetDeck privacy
 

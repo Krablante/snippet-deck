@@ -5,15 +5,15 @@
 <p align="center">Превратите короткий триггер в текст, который часто вводите. SnippetDeck работает на Android, Windows, macOS и Linux; библиотека остаётся на устройстве, пока вы сами не включите синхронизацию.</p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Android-13%2B-3d8060" alt="Android 13+">
-  <img src="https://img.shields.io/badge/Windows-x64-3d8060" alt="Windows x64">
-  <img src="https://img.shields.io/badge/macOS-Apple_Silicon_%26_Intel-3d8060" alt="macOS Apple Silicon и Intel">
-  <img src="https://img.shields.io/badge/Linux-x64_%7C_X11_expansion-3d8060" alt="Linux x64; подстановка в X11">
+  <img src="https://img.shields.io/badge/Android-13%2B-505477" alt="Android 13+">
+  <img src="https://img.shields.io/badge/Windows-x64-505477" alt="Windows x64">
+  <img src="https://img.shields.io/badge/macOS-Apple_Silicon_%26_Intel-505477" alt="macOS Apple Silicon и Intel">
+  <img src="https://img.shields.io/badge/Linux-x64_%7C_X11_expansion-505477" alt="Linux x64; подстановка в X11">
 </p>
 
 <p align="center"><a href="https://github.com/Krablante/snippet-deck/releases/latest"><strong>Скачать</strong></a> · <a href="https://krablante.github.io/snippet-deck/ru/">Сайт</a> · <a href="../../LICENSE">Лицензия MIT</a></p>
 
-<p align="center"><a href="../../README.md"><img src="https://img.shields.io/badge/Language-EN-47795e" alt="English"></a> <a href="README.md"><img src="https://img.shields.io/badge/Language-RU-806d5e" alt="Русский"></a></p>
+<p align="center"><a href="../../README.md"><img src="https://img.shields.io/badge/Language-EN-505477" alt="English"></a> <a href="README.md"><img src="https://img.shields.io/badge/Language-RU-714857" alt="Русский"></a></p>
 
 Введите `!review` и нажмите пробел: SnippetDeck заменит триггер перед курсором сохранённым текстом. Всё после курсора останется на месте. Для сниппета можно задать псевдонимы и подстановки даты или времени. Немедленное нажатие Backspace вернёт триггер, если поле поддерживает это действие.
 
@@ -46,10 +46,10 @@
 
 | Категория | English | Русский |
 | --- | --- | --- |
-| ![Guide](https://img.shields.io/badge/Docs-Guide-47795e) Использование, установка, копии, синхронизация | [Guide](../GUIDE.md) | [Руководство](GUIDE.md) |
-| ![Development](https://img.shields.io/badge/Docs-Development-47795e) Сборка и вклад в проект | [Contributing](../../CONTRIBUTING.md) | [Разработка](CONTRIBUTING.md) |
-| ![Architecture](https://img.shields.io/badge/Docs-Architecture-47795e) Код, данные, границы | [Architecture](../ARCHITECTURE.md) | [Архитектура](ARCHITECTURE.md) |
-| ![Operations](https://img.shields.io/badge/Docs-Operations-47795e) Выпуск и сопровождение | [Operations](../OPERATIONS.md) | [Эксплуатация](OPERATIONS.md) |
-| ![Privacy](https://img.shields.io/badge/Docs-Privacy-47795e) Данные и разрешения | [Privacy](../../PRIVACY.md) | [Конфиденциальность](PRIVACY.md) |
+| ![Guide](https://img.shields.io/badge/Docs-Guide-505477) Использование, установка, копии, синхронизация | [Guide](../GUIDE.md) | [Руководство](GUIDE.md) |
+| ![Development](https://img.shields.io/badge/Docs-Development-505477) Сборка и вклад в проект | [Contributing](../../CONTRIBUTING.md) | [Разработка](CONTRIBUTING.md) |
+| ![Architecture](https://img.shields.io/badge/Docs-Architecture-505477) Код, данные, границы | [Architecture](../ARCHITECTURE.md) | [Архитектура](ARCHITECTURE.md) |
+| ![Operations](https://img.shields.io/badge/Docs-Operations-505477) Выпуск и сопровождение | [Operations](../OPERATIONS.md) | [Эксплуатация](OPERATIONS.md) |
+| ![Privacy](https://img.shields.io/badge/Docs-Privacy-505477) Данные и разрешения | [Privacy](../../PRIVACY.md) | [Конфиденциальность](PRIVACY.md) |
 
 В основе SnippetDeck — [Expander](https://github.com/rrajath/expander) Раджата Радхакришнана и других участников. Установленные Android-версии сохраняют совместимость идентификаторов и старых форматов данных.

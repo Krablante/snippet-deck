@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#ffffff">
+  <meta name="theme-color" content="#f6f3ed">
   <title>SnippetDeck</title>
   <link rel="stylesheet" href="style.css">
   <script type="module" src="app.js"></script>
@@ -13,7 +13,7 @@
     <header class="topbar">
       <h1>SnippetDeck</h1>
       <div class="top-actions">
-        <button id="more" class="icon-button" type="button" aria-label="More options" aria-expanded="false">⋯</button>
+        <button id="more" class="icon-button glass-button" type="button" aria-label="More options" aria-expanded="false">⋯</button>
         <div id="menu" class="menu" hidden>
           <button id="import" type="button">Import backup…</button>
           <button id="export" type="button">Export backup…</button>
@@ -28,9 +28,9 @@
           <div class="menu-divider"></div>
           <div class="menu-label">Appearance</div>
           <div class="themes" role="group" aria-label="Appearance">
-            <button type="button" data-theme="white">White</button>
-            <button type="button" data-theme="black">Black</button>
-            <button type="button" data-theme="sepia">Sepia</button>
+            <button type="button" data-theme="white">Chalk</button>
+            <button type="button" data-theme="black">Ink</button>
+            <button type="button" data-theme="sepia">Parchment</button>
           </div>
         </div>
       </div>
@@ -39,9 +39,10 @@
     <main class="workspace">
       <section class="library" aria-label="Snippet library">
         <div class="library-tools">
-          <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search snippets" aria-label="Search snippets"></label>
-          <button id="new" class="add-button" type="button" aria-label="Add snippet">+</button>
+          <label class="search glass"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.7"/><path d="m16 16 4.4 4.4"/></svg><input id="search" type="search" placeholder="Search snippets" aria-label="Search snippets"></label>
+          <button id="new" class="add-button" type="button" aria-label="Add snippet"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg></button>
         </div>
+        <div id="count" class="count"></div>
         <div class="service-row">
           <div><strong>Text expansion</strong><small id="status">Starting…</small></div>
           <label class="switch" aria-label="Text expansion enabled"><input id="active" type="checkbox" checked><span></span></label>
@@ -54,14 +55,13 @@
           <div><strong>SnippetDeck <span id="update-version"></span> available</strong><small id="update-status">A newer release is ready.</small></div>
           <button id="install-update" class="sync-button" type="button">Install update</button>
         </div>
-        <div id="count" class="count"></div>
         <div id="list" class="snippet-list"></div>
         <p id="empty" class="empty" hidden>No snippets yet. Add one to get started.</p>
       </section>
 
       <section id="editor" class="editor" aria-label="Snippet editor" hidden>
         <div class="editor-top">
-          <button id="back" class="back icon-button" type="button" aria-label="Back to library">←</button>
+          <button id="back" class="back icon-button glass-button" type="button" aria-label="Back to library">←</button>
           <h2 id="editor-title">New snippet</h2>
           <button id="delete" class="text-button danger" type="button" hidden>Delete</button>
         </div>
@@ -75,9 +75,9 @@
         </form>
       </section>
       <section id="welcome" class="welcome" aria-hidden="true">
-        <div class="welcome-mark">→</div>
-        <h2>Your snippets, ready when you are.</h2>
-        <p>Select a snippet or create a new one.</p>
+        <div class="welcome-mark" aria-hidden="true">⌘</div>
+        <h2>Make room for what you write.</h2>
+        <p>Choose a snippet from your library.</p>
       </section>
     </main>
     <div id="notice" class="notice" role="status" hidden></div>

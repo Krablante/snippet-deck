@@ -1,4 +1,4 @@
-![Architecture](https://img.shields.io/badge/Category-Architecture-47795e) [![EN](https://img.shields.io/badge/Language-EN-47795e)](ARCHITECTURE.md) [![RU](https://img.shields.io/badge/Language-RU-806d5e)](ru/ARCHITECTURE.md)
+![Architecture](https://img.shields.io/badge/Category-Architecture-505477) [![EN](https://img.shields.io/badge/Language-EN-505477)](ARCHITECTURE.md) [![RU](https://img.shields.io/badge/Language-RU-714857)](ru/ARCHITECTURE.md)
 
 # Architecture
 
@@ -64,11 +64,11 @@ Libraries allow up to 10,000 snippets and 2 MB of backup JSON. Saves serialize t
 
 The Compose interface provides snippet editing, search, enabled state, accessibility onboarding, theme selection, backup and transfer, Google Drive connection, and manual update checks. Import always previews the source and snippet count and warns that the current library will be replaced.
 
-White, Black, and Sepia use deterministic Material 3 schemes. Dynamic wallpaper colors are deliberately disabled so canvas, cards, contrast, and screenshots remain predictable. The persisted legacy Light/Dark/System values migrate to the closest explicit palette without discarding other preferences.
+Chalk, Ink, and Parchment use deterministic Material 3 schemes. Their stored values remain `white`, `black`, and `sepia` so existing preferences still load; legacy Light/Dark/System values migrate to the nearest option. Dynamic wallpaper colors are disabled to keep contrast predictable. The snippet list is a continuous surface with controls above it; the editor keeps form fields on an opaque canvas and offers placeholders on demand.
 
 UI state is owned by view models and repositories rather than composables. Platform actions such as document selection and clipboard access remain at the UI boundary.
 
-Desktop uses a small static web interface following the same White, Black, and Sepia palettes. It presents the list and editor side by side on wide screens and opens the editor as a full-screen panel on narrow screens. The Rust side owns persistence, validation, file dialogs, and expansion; the WebView has no direct filesystem or network access. At most 80 library rows are rendered at a time until the user requests more.
+Desktop uses a small static web interface with the same three palettes. On a narrow window the library and full-screen editor alternate; on a wide window they sit side by side. Search and menus use a translucent control layer with an opaque fallback for reduced transparency. The Rust side owns persistence, validation, file dialogs, and expansion; the WebView has no direct filesystem or network access. At most 80 library rows are rendered at a time until the user requests more.
 
 ## Backup formats
 

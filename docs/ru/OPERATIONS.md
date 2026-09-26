@@ -1,4 +1,4 @@
-![Эксплуатация](https://img.shields.io/badge/Category-Operations-47795e) [![EN](https://img.shields.io/badge/Language-EN-47795e)](../OPERATIONS.md) [![RU](https://img.shields.io/badge/Language-RU-806d5e)](OPERATIONS.md)
+![Эксплуатация](https://img.shields.io/badge/Category-Operations-505477) [![EN](https://img.shields.io/badge/Language-EN-505477)](../OPERATIONS.md) [![RU](https://img.shields.io/badge/Language-RU-714857)](OPERATIONS.md)
 
 # Эксплуатация SnippetDeck
 
@@ -12,7 +12,7 @@ Android workflow запускает unit-тесты, lint и отладочну�
 
 ## Выпуск из `main`
 
-Используйте `.github/workflows/release.yml` с семантическим тегом, например `v1.8.1`. В релиз обязательно входят официальный подписанный APK и все четыре установщика. Оба приложения смотрят на GitHub `releases/latest`; релиз только для desktop сломал бы Android-обновления.
+Используйте `.github/workflows/release.yml` с семантическим тегом, например `v1.8.2`. В релиз обязательно входят официальный подписанный APK и все четыре установщика. Оба приложения смотрят на GitHub `releases/latest`; релиз только для desktop сломал бы Android-обновления.
 
 Перед запуском workflow:
 

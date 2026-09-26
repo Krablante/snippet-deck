@@ -2,27 +2,31 @@ package com.rrajath.expander.ui.screens
 
 import android.content.Intent
 import android.provider.Settings
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.rrajath.expander.data.Snippet
 import com.rrajath.expander.service.TextExpansionService
-import com.rrajath.expander.ui.components.EmptyState
 import com.rrajath.expander.ui.components.SearchBar
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SnippetListScreen(
     snippets: List<Snippet>,
@@ -33,265 +37,169 @@ fun SnippetListScreen(
     onSnippetToggle: (Snippet) -> Unit,
     onAddClick: () -> Unit,
     onSettingsClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("SnippetDeck") },
-                actions = {
-                    IconButton(onClick = onSettingsClick) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings"
-                        )
-                    }
-                }
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = onAddClick,
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Add snippet"
-                )
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var accessibilityEnabled by remember { mutableStateOf(TextExpansionService.isAccessibilityServiceEnabled(context)) }
+    var serviceEnabled by remember { mutableStateOf(TextExpansionService.isServiceEnabled(context)) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                accessibilityEnabled = TextExpansionService.isAccessibilityServiceEnabled(context)
+                serviceEnabled = TextExpansionService.isServiceEnabled(context)
             }
         }
-    ) { paddingValues ->
-        val context = LocalContext.current
-        var isAccessibilityEnabled by remember { mutableStateOf(TextExpansionService.isAccessibilityServiceEnabled(context)) }
-        var showWarningBanner by remember { mutableStateOf(!isAccessibilityEnabled) }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val colors = MaterialTheme.colorScheme
 
-        // Recheck when the screen resumes
-        DisposableEffect(Unit) {
-            onDispose {
-                isAccessibilityEnabled = TextExpansionService.isAccessibilityServiceEnabled(context)
-                showWarningBanner = !isAccessibilityEnabled
-            }
-        }
-
-        Column(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 12.dp)
+    Box(modifier = modifier.fillMaxSize().background(colors.background).statusBarsPadding().navigationBarsPadding()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = 116.dp, bottom = 96.dp),
         ) {
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Accessibility Service Warning Banner
-            if (showWarningBanner) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
+            if (!accessibilityEnabled || !serviceEnabled) {
+                item {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.fillMaxWidth().background(colors.errorContainer)
+                            .padding(start = 18.dp, end = 10.dp, top = 9.dp, bottom = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Accessibility Service Disabled",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Text(
-                                text = "Text expansion won't work. Enable it in Settings.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Button(
-                            onClick = {
-                                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.error
-                            )
-                        ) {
+                        Text(if (accessibilityEnabled) "Text expansion is paused" else "Text expansion is off", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        TextButton(onClick = {
+                            if (accessibilityEnabled) onSettingsClick()
+                            else context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        }) {
                             Text("Enable")
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
             }
-
-            SearchBar(
-                query = searchQuery,
-                onQueryChange = onSearchQueryChange
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            if (snippets.isEmpty()) {
-                EmptyState(
-                    message = if (searchQuery.isEmpty()) {
-                        "No snippets yet.\nTap + to create your first snippet!"
-                    } else {
-                        "No snippets found for \"$searchQuery\""
-                    },
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+            item {
+                Text(
+                    text = if (searchQuery.isEmpty()) "${snippets.size} ${if (snippets.size == 1) "snippet" else "snippets"}" else "${snippets.size} found",
+                    modifier = Modifier.padding(start = 20.dp, top = 10.dp, bottom = 9.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.onSurfaceVariant,
                 )
+            }
+            if (snippets.isEmpty()) {
+                item {
+                    Text(
+                        text = if (searchQuery.isEmpty()) "No snippets yet. Tap + to add one." else "No matching snippets",
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 52.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = colors.onSurfaceVariant,
+                    )
+                }
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    items(
-                        items = snippets,
-                        key = { it.id }
-                    ) { snippet ->
-                        SnippetItem(
-                            snippet = snippet,
-                            onClick = { onSnippetClick(snippet.id) },
-                            onDelete = { onSnippetDelete(snippet) },
-                            onToggle = { onSnippetToggle(snippet) }
-                        )
-                    }
-
-                    // Bottom spacing for FAB
-                    item {
-                        Spacer(modifier = Modifier.height(72.dp))
-                    }
+                items(snippets, key = { it.id }) { snippet ->
+                    SnippetItem(
+                        snippet = snippet,
+                        onClick = { onSnippetClick(snippet.id) },
+                        onDelete = { onSnippetDelete(snippet) },
+                        onToggle = { onSnippetToggle(snippet) },
+                    )
                 }
             }
+        }
+
+        Column(
+            modifier = Modifier.fillMaxWidth().background(
+                Brush.verticalGradient(listOf(colors.background, colors.background.copy(alpha = 0.96f), colors.background.copy(alpha = 0f)))
+            ).padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 13.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(48.dp)) {
+                Text("SnippetDeck", modifier = Modifier.weight(1f).padding(start = 4.dp), style = MaterialTheme.typography.titleLarge, color = colors.onBackground)
+                IconButton(onClick = onSettingsClick) {
+                    Icon(Icons.Default.Settings, contentDescription = "Settings", tint = colors.onBackground)
+                }
+            }
+            SearchBar(query = searchQuery, onQueryChange = onSearchQueryChange, modifier = Modifier.fillMaxWidth())
+        }
+
+        FloatingActionButton(
+            onClick = onAddClick,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 18.dp),
+            containerColor = colors.primary,
+            contentColor = colors.onPrimary,
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "Add snippet")
         }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun SnippetItem(
+private fun SnippetItem(
     snippet: Snippet,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onToggle: () -> Unit,
-    modifier: Modifier = Modifier
 ) {
-    var showDeleteDialog by remember { mutableStateOf(false) }
-
-    if (showDeleteDialog) {
+    var menuOpen by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    if (confirmDelete) {
         AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete Snippet") },
-            text = { Text("Are you sure you want to delete \"${snippet.trigger}\"?") },
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete ${snippet.trigger}?") },
+            text = { Text("This snippet will be removed from this device.") },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDelete()
-                        showDeleteDialog = false
-                    }
-                ) {
-                    Text("Delete")
-                }
+                TextButton(onClick = { confirmDelete = false; onDelete() }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancel")
-                }
-            }
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
         )
     }
-
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = { showDeleteDialog = true }
-            ),
-        colors = CardDefaults.cardColors(
-            containerColor = if (snippet.isEnabled) {
-                MaterialTheme.colorScheme.surfaceVariant
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
-        )
+    val colors = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)
+            .combinedClickable(onClick = onClick, onLongClick = { menuOpen = true })
+            .padding(start = 20.dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = snippet.trigger,
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = if (snippet.isEnabled) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        }
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(2.dp))
-
-                if (snippet.aliases.isNotEmpty()) {
-                    Text(
-                        text = "Aliases: ${snippet.aliases.joinToString()}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.secondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                }
-
+        Column(modifier = Modifier.weight(1f).padding(vertical = 11.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = snippet.expansion,
-                    style = MaterialTheme.typography.bodySmall,
+                    text = snippet.trigger,
+                    style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
+                    color = if (snippet.isEnabled) colors.onSurface else colors.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = if (snippet.isEnabled) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                    }
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (!snippet.isEnabled) {
+                    Text("  Off", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                }
+            }
+            if (snippet.aliases.isNotEmpty()) {
+                Text(
+                    snippet.aliases.joinToString(" · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-
-            Spacer(modifier = Modifier.width(6.dp))
-
-            Switch(
-                checked = snippet.isEnabled,
-                onCheckedChange = { onToggle() }
+            Text(
+                snippet.expansion.replace('\n', ' '),
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
+        Box {
+            IconButton(onClick = { menuOpen = true }) {
+                Icon(Icons.Default.MoreVert, contentDescription = "Options for ${snippet.trigger}", tint = colors.onSurfaceVariant)
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(text = { Text(if (snippet.isEnabled) "Turn off" else "Turn on") }, onClick = { menuOpen = false; onToggle() })
+                DropdownMenuItem(text = { Text("Delete", color = colors.error) }, onClick = { menuOpen = false; confirmDelete = true })
+            }
+        }
     }
+    HorizontalDivider(modifier = Modifier.padding(start = 20.dp), color = colors.outlineVariant.copy(alpha = 0.65f))
 }

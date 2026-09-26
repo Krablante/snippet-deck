@@ -1,7 +1,7 @@
 # SnippetDeck Android app icon assets
 
-The SnippetDeck icon uses a dark ink squircle, cream curly braces `{ }`,
-and a coral placeholder bar.
+The SnippetDeck icon uses an ink squircle, chalk curly braces `{ }`,
+and a lavender placeholder bar.
 
 ## File layout
 
@@ -15,7 +15,7 @@ mipmap-xhdpi/            ic_launcher.png (96), ic_launcher_round.png (96), ic_la
 mipmap-xxhdpi/           ic_launcher.png (144), ic_launcher_round.png (144), ic_launcher_foreground.png (324)
 mipmap-xxxhdpi/          ic_launcher.png (192), ic_launcher_round.png (192), ic_launcher_foreground.png (432)
 mipmap-anydpi-v26/       ic_launcher.xml, ic_launcher_round.xml      (adaptive icon definition)
-values/                  ic_launcher_background.xml                  (background color: #1F2227)
+values/                  ic_launcher_background.xml                  (background color: #282832)
 play-store/              ic_launcher-playstore.png (512x512)         (Play Console listing)
 source/                  icon.svg, icon-foreground.svg               (master vectors)
 ```
@@ -26,10 +26,10 @@ Android 8+ uses adaptive icons: a foreground layer + background layer that
 the system composites and masks (circle, squircle, teardrop, etc.) based on
 the launcher.
 
-- **Background:** solid `#1F2227` (dark ink), defined as a color resource in
+- **Background:** solid `#282832` (ink), defined as a color resource in
   `values/ic_launcher_background.xml`.
 - **Foreground:** `ic_launcher_foreground.png` per density — braces and the
-  coral bar on a transparent canvas. Content is laid out within Android's
+  lavender bar on a transparent canvas. Content is laid out within Android's
   66dp/108dp safe zone so any system mask shape stays clear of the design.
 
 The legacy bitmaps (`mipmap-*/ic_launcher.png` and `_round.png`) are pre-shaped
@@ -57,6 +57,6 @@ PNGs at the listed sizes.
 
 | Token            | Value     | Use                          |
 |------------------|-----------|------------------------------|
-| Ink              | `#1F2227` | Background / squircle fill   |
-| Cream            | `#F4EFE6` | Braces stroke                |
-| Coral            | `#E25A3C` | Placeholder bar accent       |
+| Ink              | `#282832` | Background / squircle fill   |
+| Chalk            | `#F6F3ED` | Braces stroke                |
+| Lavender         | `#C8C8EE` | Placeholder bar accent       |

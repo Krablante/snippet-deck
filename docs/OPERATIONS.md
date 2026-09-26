@@ -1,4 +1,4 @@
-![Operations](https://img.shields.io/badge/Category-Operations-47795e) [![EN](https://img.shields.io/badge/Language-EN-47795e)](OPERATIONS.md) [![RU](https://img.shields.io/badge/Language-RU-806d5e)](ru/OPERATIONS.md)
+![Operations](https://img.shields.io/badge/Category-Operations-505477) [![EN](https://img.shields.io/badge/Language-EN-505477)](OPERATIONS.md) [![RU](https://img.shields.io/badge/Language-RU-714857)](ru/OPERATIONS.md)
 
 # Operate SnippetDeck
 
@@ -12,7 +12,7 @@ The Android and desktop source toolchains and local test commands are in [Contri
 
 ## Release from `main`
 
-Release through `.github/workflows/release.yml` with a semantic tag such as `v1.8.1`. It must contain the official signed APK and all four installers. Both apps resolve GitHub `releases/latest`, so a desktop-only latest release would break Android's updater.
+Release through `.github/workflows/release.yml` with a semantic tag such as `v1.8.2`. It must contain the official signed APK and all four installers. Both apps resolve GitHub `releases/latest`, so a desktop-only latest release would break Android's updater.
 
 Before dispatching the workflow:
 

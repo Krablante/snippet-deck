@@ -10,6 +10,12 @@ let syncPending = null;
 let lastPull = 0;
 let updateAvailable = null;
 let updateBusy = false;
+let editorOriginal = '';
+let libraryScroll = 0;
+
+function editorValues() {
+  return JSON.stringify([$('trigger').value, $('aliases').value, $('expansion').value, $('snippet-enabled').checked]);
+}
 
 function notify(message) {
   const notice = $('notice');
@@ -98,7 +104,7 @@ function render() {
     preview.className = 'snippet-preview';
     preview.textContent = snippet.expansion.replace(/\s+/g, ' ');
     row.append(preview);
-    row.addEventListener('click', () => edit(snippet));
+    row.addEventListener('click', () => openEditor(snippet));
     list.append(row);
   }
   if (filtered.length > visible) {
@@ -112,6 +118,7 @@ function render() {
 }
 
 function edit(snippet = null) {
+  if (!document.querySelector('.shell').classList.contains('editing')) libraryScroll = window.scrollY;
   selected = snippet?.trigger ?? null;
   $('editor-title').textContent = snippet ? 'Edit snippet' : 'New snippet';
   $('delete').hidden = !snippet;
@@ -120,17 +127,34 @@ function edit(snippet = null) {
   $('expansion').value = snippet?.expansion ?? '';
   $('snippet-enabled').checked = snippet?.enabled ?? true;
   $('form-error').hidden = true;
+  editorOriginal = editorValues();
   $('editor').hidden = false;
   $('welcome').hidden = true;
+  document.querySelector('.shell').classList.add('editing');
   render();
-  $('trigger').focus();
+  if (!snippet) $('trigger').focus();
+  if (window.innerWidth <= 700) window.scrollTo(0, 0);
 }
 
 function closeEditor() {
   selected = null;
+  document.querySelector('.shell').classList.remove('editing');
   $('editor').hidden = true;
   $('welcome').hidden = false;
   render();
+  if (window.innerWidth <= 700) window.scrollTo(0, libraryScroll);
+}
+
+async function openEditor(snippet = null) {
+  if (!$('editor').hidden && editorValues() !== editorOriginal &&
+      !await ask('Discard changes?', 'Your edits have not been saved.', 'Discard')) return;
+  edit(snippet);
+}
+
+async function leaveEditor() {
+  if (editorValues() !== editorOriginal && !await ask('Discard changes?', 'Your edits have not been saved.', 'Discard')) return;
+  closeEditor();
+  $('new').focus();
 }
 
 async function refresh() {
@@ -190,12 +214,18 @@ Promise.all([
     $('update-status').textContent = `Downloading installer… ${event.payload}%`;
   })
 ]).catch(() => {}).then(() => refresh().then(() => { if (syncConnected) syncDrive(); }));
-$('new').addEventListener('click', () => edit());
-$('back').addEventListener('click', closeEditor);
+$('new').addEventListener('click', () => openEditor());
+$('back').addEventListener('click', leaveEditor);
 $('search').addEventListener('input', () => { visible = 80; render(); });
 $('more').addEventListener('click', () => menu($('menu').hidden));
 document.addEventListener('click', event => {
   if (!$('more').contains(event.target) && !$('menu').contains(event.target)) menu(false);
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !$('confirm').open) {
+    if (!$('menu').hidden) menu(false);
+    else if (!$('editor').hidden && window.innerWidth <= 700) leaveEditor();
+  }
 });
 document.querySelectorAll('.themes button').forEach(button => button.addEventListener('click', () => {
   theme(button.dataset.theme);
@@ -288,7 +318,8 @@ $('form').addEventListener('submit', async event => {
     await invoke('save_snippet', { previous, snippet });
     await refresh();
     const saved = snippets.find(s => s.trigger.toLocaleLowerCase() === (snippet.trigger.startsWith('!') ? snippet.trigger : `!${snippet.trigger}`).toLocaleLowerCase());
-    if (saved) edit(saved);
+    if (window.innerWidth <= 700) closeEditor();
+    else if (saved) edit(saved);
     notify('Snippet saved');
     if (syncConnected) syncDrive();
   } catch (error) {

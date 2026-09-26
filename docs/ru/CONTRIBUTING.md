@@ -1,4 +1,4 @@
-![Разработка](https://img.shields.io/badge/Category-Development-47795e) [![EN](https://img.shields.io/badge/Language-EN-47795e)](../../CONTRIBUTING.md) [![RU](https://img.shields.io/badge/Language-RU-806d5e)](CONTRIBUTING.md)
+![Разработка](https://img.shields.io/badge/Category-Development-505477) [![EN](https://img.shields.io/badge/Language-EN-505477)](../../CONTRIBUTING.md) [![RU](https://img.shields.io/badge/Language-RU-714857)](CONTRIBUTING.md)
 
 # Разработка SnippetDeck
 
