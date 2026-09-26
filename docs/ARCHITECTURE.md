@@ -62,7 +62,7 @@ Desktop keeps a separate local JSON file under the OS application-data directory
 
 The Compose interface provides snippet editing, search, enabled state, accessibility onboarding, theme selection, backup and transfer, Google Drive connection, and manual update checks. Import always previews the source and snippet count and warns that the current library will be replaced.
 
-White, Black, and Sepia use deterministic Material 3 schemes adapted from Textory. Dynamic wallpaper colors are deliberately disabled so canvas, cards, contrast, and screenshots remain predictable. The persisted legacy Light/Dark/System values migrate to the closest explicit palette without discarding other preferences.
+White, Black, and Sepia use deterministic Material 3 schemes. Dynamic wallpaper colors are deliberately disabled so canvas, cards, contrast, and screenshots remain predictable. The persisted legacy Light/Dark/System values migrate to the closest explicit palette without discarding other preferences.
 
 UI state is owned by view models and repositories rather than composables. Platform actions such as document selection and clipboard access remain at the UI boundary.
 

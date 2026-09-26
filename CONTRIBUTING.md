@@ -4,17 +4,17 @@ Thank you for helping improve SnippetDeck. Small, focused changes with clear tes
 
 ## Development setup
 
-You need JDK 17, Android SDK 36, and an Android 13+ device or emulator.
+Pick the toolchain for the platform you are changing. Android development needs JDK 17, Android SDK 36, and an Android 13+ device or emulator.
 
 Desktop development uses Rust and the [Tauri system prerequisites](https://v2.tauri.app/start/prerequisites/) (`libxdo-dev` is also needed on Debian/Ubuntu). From `desktop/src-tauri`, run `cargo build --locked`. The desktop UI is static and does not need an npm dependency install. The `Desktop builds` workflow packages on each target OS.
 
-Create an ignored `local.properties` with your SDK location or open the project in Android Studio, then verify the checkout:
+For Android, create an ignored `local.properties` with your SDK location or open the project in Android Studio, then run:
 
 ```bash
 ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --max-workers=2
 ```
 
-Debug builds use the `.debug` application ID suffix and can be installed alongside an official release.
+Debug builds use the `.debug` application ID suffix and can be installed alongside an official release. For desktop, run `cargo test --locked` from `desktop/src-tauri` to check the Rust code.
 
 ## Change guidelines
 

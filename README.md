@@ -1,44 +1,39 @@
 <p align="center">
-  <img src="design/app_icons/play-store/ic_launcher-playstore.png" width="128" alt="SnippetDeck app icon">
+  <img src="desktop/src-tauri/icons/icon.png" width="128" alt="SnippetDeck app icon">
 </p>
 
 <h1 align="center">SnippetDeck</h1>
 
 <p align="center">
-  A fast, local-first text expander for Android and desktop.
+  A local-first text expander for Android, Windows, macOS, and Linux.
 </p>
 
 <p align="center">
-  <a href="https://github.com/Krablante/snippet-deck/actions/workflows/ci.yml"><img src="https://github.com/Krablante/snippet-deck/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="https://github.com/Krablante/snippet-deck/actions/workflows/ci.yml"><img src="https://github.com/Krablante/snippet-deck/actions/workflows/ci.yml/badge.svg" alt="Android CI"></a>
   <a href="https://github.com/Krablante/snippet-deck/actions/workflows/desktop.yml"><img src="https://github.com/Krablante/snippet-deck/actions/workflows/desktop.yml/badge.svg" alt="Desktop builds"></a>
   <a href="https://github.com/Krablante/snippet-deck/releases/latest"><img src="https://img.shields.io/github/v/release/Krablante/snippet-deck" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
-  <img src="https://img.shields.io/badge/Android-13%2B-3DDC84?logo=android&logoColor=white" alt="Android 13 or newer">
 </p>
 
-Type a trigger such as `!review`, press Space, and SnippetDeck replaces it immediately before the cursor. Text after the cursor stays in place, and the app never submits the target field.
+<p align="center">Android 13+ · Windows x64 · macOS Apple Silicon &amp; Intel · Linux x64 (X11 for expansion)</p>
+
+<p align="center"><a href="https://github.com/Krablante/snippet-deck/releases/latest"><strong>Download SnippetDeck</strong></a> · <a href="https://krablante.github.io/snippet-deck/">Website</a></p>
+
+Type a trigger such as `!review`, press Space, and SnippetDeck replaces it immediately before the cursor. Text after the cursor stays in place, and the app never submits the target field. Keep snippets on each device, transfer a backup, or choose to sync through your own Google Drive account.
 
 ## See it in action
 
-<table>
-  <tr>
-    <td width="33%" align="center">
-      <img src="docs/images/snippet-library.png" width="260" alt="SnippetDeck library with example snippets">
-      <br><strong>White · Build your library</strong>
-      <br><sub>Keep triggers, aliases, and expansions easy to scan.</sub>
-    </td>
-    <td width="33%" align="center">
-      <img src="docs/images/snippet-editor.png" width="260" alt="SnippetDeck editor with a date placeholder">
-      <br><strong>Sepia · Create flexible snippets</strong>
-      <br><sub>Add plain aliases and dynamic values such as <code>{{date}}</code>.</sub>
-    </td>
-    <td width="33%" align="center">
-      <img src="docs/images/settings-backup.png" width="260" alt="SnippetDeck settings and backup actions">
-      <br><strong>Black · Stay in control</strong>
-      <br><sub>Manage the service, appearance, and portable backups.</sub>
-    </td>
-  </tr>
-</table>
+The desktop editor keeps your library and the selected snippet side by side. The example below uses sample snippets.
+
+<p align="center"><img src="docs/images/desktop-editor.png" width="920" alt="SnippetDeck desktop editor showing a snippet library beside the selected snippet"></p>
+
+On Android, browse the same library and edit snippets from a compact screen.
+
+<p align="center">
+  <img src="docs/images/snippet-library.png" width="230" alt="SnippetDeck Android snippet library">
+  &nbsp;&nbsp;
+  <img src="docs/images/snippet-editor.png" width="230" alt="SnippetDeck Android snippet editor with a date placeholder">
+</p>
 
 ```text
 Create a snippet  →  type !today + Space  →  SnippetDeck inserts the expansion
@@ -54,12 +49,18 @@ Create a snippet  →  type !today + Space  →  SnippetDeck inserts the expansi
 - A compact, searchable snippet library with enabled state and White, Black, or Sepia themes.
 - Portable JSON files and compact text backups for moving a library between devices.
 - Local snippet storage with optional sync through your own Google Drive account; no SnippetDeck server, analytics, or advertising.
-- Quiet GitHub release checks and verified in-app APK updates.
-- A desktop editor and background text expansion for Windows, macOS, and Linux X11.
+- Quiet release checks and verified, user-approved installer downloads on Android and desktop.
+- A desktop editor and background text expansion for Windows, macOS, and Linux X11; the Linux editor also runs on Wayland.
 
 ## Install
 
-The [SnippetDeck website](https://krablante.github.io/snippet-deck/) introduces the app and hosts its [privacy policy](https://krablante.github.io/snippet-deck/privacy.html). Installers are published on GitHub Releases.
+Choose the installer for your device from the [latest GitHub release](https://github.com/Krablante/snippet-deck/releases/latest). The [SnippetDeck website](https://krablante.github.io/snippet-deck/) also hosts the [privacy policy](https://krablante.github.io/snippet-deck/privacy.html).
+
+### Windows, macOS, and Linux
+
+Download the Windows x64 `.msi`, macOS `.dmg` for Apple Silicon or Intel, or Linux x64 `.deb` from that release. Development builds are also available from the [Desktop builds workflow](https://github.com/Krablante/snippet-deck/actions/workflows/desktop.yml). The macOS builds are currently unsigned and have not yet been tested on a Mac; Gatekeeper may require an explicit **Open Anyway** decision. Windows and macOS compatibility should be verified on real machines before relying on them for everyday use.
+
+Launch the app and leave it running to expand text. Closing the editor keeps the background agent available in the tray. **More options → Start at login** enables automatic launch; **Text expansion** pauses it. On macOS, grant the app Accessibility permission when prompted, then reopen it. On Linux Wayland, the library editor remains usable, but automatic text expansion is not supported. The X11 build does not require root privileges.
 
 ### Android
 
@@ -69,12 +70,6 @@ SnippetDeck requires Android 13 or newer.
 2. Install the APK. Android may ask you to allow installation from your browser or file manager.
 3. If Android blocks the accessibility service for a sideloaded app, open **App info → menu → Allow restricted settings**.
 4. Open SnippetDeck and enable its accessibility service.
-
-### Desktop
-
-Download the Windows, macOS (Apple Silicon or Intel), or Linux X11 installer (`.msi`, `.dmg`, or `.deb`) alongside the Android APK from the [latest GitHub release](https://github.com/Krablante/snippet-deck/releases/latest). Development builds are also available from the [Desktop builds workflow](https://github.com/Krablante/snippet-deck/actions/workflows/desktop.yml). The macOS builds are currently unsigned and have not yet been tested on a Mac; Gatekeeper may require an explicit **Open Anyway** decision. Windows and macOS compatibility should be verified on real machines before relying on them for everyday use.
-
-Launch the app and leave it running to expand text. Closing the editor keeps the background agent available in the tray. **More options → Start at login** enables automatic launch; **Text expansion** pauses it. On macOS, grant the app Accessibility permission when prompted, then reopen it. On Linux Wayland, the library editor remains usable, but automatic text expansion is not supported. The X11 build does not require root privileges.
 
 ## Updates
 
@@ -87,6 +82,8 @@ On Android, you can also open **Settings → About → Check for updates** at an
 - The official SnippetDeck signing certificate.
 
 On desktop, use **More options → Check for updates** for a visible result or retry. Select **Install update** and confirm to download the matching `.msi`, `.dmg`, or `.deb` from the latest stable release. SnippetDeck checks its size and GitHub SHA-256 digest before opening the operating system's installer. Finish the installation there: Windows closes the running app for MSI, macOS opens the disk image for you to move the app into Applications, and Linux opens the Debian package with its configured handler. If Linux has no package handler, use the displayed downloaded path with your package manager. Existing local libraries are preserved by an in-place installation.
+
+Desktop installations older than v1.8.0 need one manual upgrade from GitHub Releases to get the in-app update check.
 
 There is no background polling or automatic installation. Contextual Android `PROCESS_TEXT` launches never trigger an update check.
 
@@ -106,7 +103,7 @@ On desktop, click **+** to add a snippet, or open one to edit it. Triggers and a
 SnippetDeck includes three stable palettes that do not inherit wallpaper colors:
 
 - **White** — a clean neutral canvas with restrained green actions.
-- **Black** — Textory's deep low-light palette with high-contrast text.
+- **Black** — a deep low-light palette with high-contrast text.
 - **Sepia Paper** — a warm book-like canvas with a brown accent.
 
 Existing Light and Dark preferences migrate to White and Black. A legacy System preference resolves once to White or Black using the device mode active during migration.

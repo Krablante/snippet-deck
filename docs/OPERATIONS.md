@@ -10,7 +10,7 @@ Run SnippetDeck after installation. The tray's **Open library** item opens the e
 
 To build locally, install the [Tauri desktop prerequisites](https://v2.tauri.app/start/prerequisites/) and Rust, plus `libxdo-dev` on Debian/Ubuntu Linux. From `desktop/src-tauri` run `cargo build --locked`; the app binary is under `target/debug`. The static UI lives in `desktop/ui`. The Linux `.deb` depends on `libxdo3` and installs it through the package manager. To package a release installer, use Tauri CLI or the GitHub workflow on the matching OS. A macOS installer intended for seamless public distribution still needs signing and notarization with the maintainer's Apple Developer identity.
 
-## Install an official release
+## Install an official Android release
 
 1. Download the APK from the [latest GitHub release](https://github.com/Krablante/snippet-deck/releases/latest).
 2. Install it on Android 13 or newer.
