@@ -2,7 +2,7 @@
 
 ## Goals
 
-SnippetDeck favors a small local-first architecture, predictable behavior, and portable recovery over infrastructure. It has no account system or backend, and the device remains the source of truth.
+SnippetDeck favors a small local-first architecture, predictable behavior, and portable recovery over infrastructure. It has no account system or backend; each device stores its own library. Transfer between devices requires an explicit backup export and import.
 
 The design prioritizes:
 
@@ -39,6 +39,8 @@ Nodes that do not expose selection information use an end-of-field fallback. The
 
 Immediate Backspace restores the typed trigger at its original cursor location where the target node supports the required editing actions. Dynamic placeholders are resolved immediately before insertion, and virtual `!help` is generated from enabled snippets.
 
+The desktop Rust agent observes keyboard events through `rdev` and replaces the immediately preceding typed trigger through `enigo`. It keeps no field text on disk. The editor is a Tauri WebView that can close while the agent stays in the tray, releasing the WebView process when it is not needed. Single-line text is inserted through native input; Linux X11 uses the fast `libxdo` backend. Multiline text uses a paste operation so a simulated Enter cannot submit the target field. The app temporarily owns the clipboard and restores its previous supported content after paste, unless the user copied something else meanwhile. The agent does not inspect the entire target field: mouse clicks, navigation, or shortcuts clear its short in-memory trigger buffer. It works on Windows and macOS and on Linux X11; Wayland text expansion is deliberately disabled. The desktop engine maintains a lookup table for triggers and aliases and rebuilds it only after the library changes.
+
 ## Data layer
 
 `SnippetDao` is the Room persistence boundary. `SnippetRepository` serves the Compose editor, accessibility cache, and restore flow.
@@ -53,6 +55,8 @@ Each snippet has one primary trigger and zero or more aliases:
 
 A complete restore validates the input and then replaces the library in one Room transaction. Fresh local IDs are assigned during import.
 
+Desktop keeps a separate local JSON file under the OS application-data directory. Saves write a temporary file in the same directory and rename it over the old copy. The file uses the Android backup envelope with `format=snippetdeck-backup` and `schemaVersion=2`, so export and import are reversible across platforms. This is still a **backup format**, not a conflict-aware sync protocol: records lack stable cross-device identities and deletion history. Avoid pointing two live desktop installations at the same working file.
+
 ## Compose UI
 
 The Compose interface provides snippet editing, search, enabled state, accessibility onboarding, theme selection, backup and transfer, and manual update checks. Import always previews the source and snippet count and warns that the current library will be replaced.
@@ -60,6 +64,8 @@ The Compose interface provides snippet editing, search, enabled state, accessibi
 White, Black, and Sepia use deterministic Material 3 schemes adapted from Textory. Dynamic wallpaper colors are deliberately disabled so canvas, cards, contrast, and screenshots remain predictable. The persisted legacy Light/Dark/System values migrate to the closest explicit palette without discarding other preferences.
 
 UI state is owned by view models and repositories rather than composables. Platform actions such as document selection and clipboard access remain at the UI boundary.
+
+Desktop uses a small static web interface following the same White, Black, and Sepia palettes. It presents the list and editor side by side on wide screens and opens the editor as a full-screen panel on narrow screens. The Rust side owns persistence, validation, file dialogs, and expansion; the WebView has no direct filesystem or network access. At most 80 library rows are rendered at a time until the user requests more.
 
 ## Backup formats
 
@@ -72,6 +78,8 @@ UI state is owned by view models and repositories rather than composables. Platf
 - An empty backup is valid and intentionally clears the library after confirmation.
 
 `ImportExportManager` reads and writes content URIs with strict size limits. Clipboard interaction stays in the UI layer.
+
+The desktop import accepts Android's JSON envelope, raw-array and legacy backups, and compressed text V1/V2. It validates the complete library and previews the count before a full replacement. The desktop export writes the same versioned JSON envelope, without local row IDs. A user can transfer the exported file through Google Drive manually. Automatic cloud sync would require durable record identities and conflict handling, and is not part of this design.
 
 ## Application updates
 
@@ -89,6 +97,8 @@ APK download starts only after explicit confirmation. Acceptance requires the ex
 ## Security and privacy boundaries
 
 - Network access is limited to public GitHub release metadata and a user-approved APK download.
+- Desktop has no networking component; the GitHub updater exists only on Android.
+- Multiline desktop insertion briefly exposes snippet text to the local system clipboard. Clipboard managers may retain it; this is not a channel for secrets.
 - Snippets, observed text, settings, and backups are never sent with update requests.
 - There is no background network worker, polling process, data sync, or silent installation.
 - Observed editable text is not persisted or transmitted.

@@ -2,6 +2,14 @@
 
 This document covers public installation, builds, releases, and user-data recovery. Machine-specific paths, credentials, and maintainer infrastructure do not belong in the repository.
 
+## Desktop builds and installation
+
+The `Desktop builds` workflow compiles the same Rust source on Windows, macOS, and Linux. Its build artifacts contain `.msi`, `.dmg`, and `.deb` installers respectively. A manual run from `main` publishes them as a **desktop prerelease**. These builds are unsigned; macOS Gatekeeper may require a manual **Open Anyway** decision. Keep the desktop release marked as a prerelease: Android's updater expects the latest stable release to include an official signed APK.
+
+Run SnippetDeck after installation. The tray's **Open library** item opens the editor; closing the editor keeps expansion active. Choose **Start at login** in the editor's menu to make the agent available after sign-in. If you grant Accessibility permission on macOS after starting SnippetDeck, quit and reopen it. Linux expansion is supported in an X11 session; in Wayland the editor works, while expansion is disabled.
+
+To build locally, install the [Tauri desktop prerequisites](https://v2.tauri.app/start/prerequisites/) and Rust, plus `libxdo-dev` on Debian/Ubuntu Linux. From `desktop/src-tauri` run `cargo build --locked`; the app binary is under `target/debug`. The static UI lives in `desktop/ui`. The Linux `.deb` depends on `libxdo3` and installs it through the package manager. To package a release installer, use Tauri CLI or the GitHub workflow on the matching OS. A macOS installer intended for seamless public distribution still needs signing and notarization with the maintainer's Apple Developer identity.
+
 ## Install an official release
 
 1. Download the APK from the [latest GitHub release](https://github.com/Krablante/snippet-deck/releases/latest).
@@ -94,6 +102,8 @@ To recover:
 2. Enable its accessibility service.
 3. Import the latest file or text backup.
 4. Confirm the restored count and test both an enabled and disabled snippet.
+
+On desktop, select **More options → Export backup…** to create Android-compatible JSON. **Import backup…** accepts that file or a compact text backup, previews the count, and replaces the whole library after confirmation. Export from each device before importing when both libraries have changed independently. A folder synchronized by Google Drive can carry exported files, but does not turn them into automatic two-way sync. The working library file belongs in local app data, never in a folder shared between live installations.
 
 ## Upstream changes
 

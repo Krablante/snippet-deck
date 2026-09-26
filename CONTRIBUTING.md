@@ -6,6 +6,8 @@ Thank you for helping improve SnippetDeck. Small, focused changes with clear tes
 
 You need JDK 17, Android SDK 36, and an Android 13+ device or emulator.
 
+Desktop development uses Rust and the [Tauri system prerequisites](https://v2.tauri.app/start/prerequisites/) (`libxdo-dev` is also needed on Debian/Ubuntu). From `desktop/src-tauri`, run `cargo build --locked`. The desktop UI is static and does not need an npm dependency install. The `Desktop builds` workflow packages on each target OS.
+
 Create an ignored `local.properties` with your SDK location or open the project in Android Studio, then verify the checkout:
 
 ```bash
@@ -17,6 +19,9 @@ Debug builds use the `.debug` application ID suffix and can be installed alongsi
 ## Change guidelines
 
 - Keep the architecture local-first and avoid introducing services or dependencies without a concrete product need.
+- Desktop local data must remain compatible with Android JSON and text backups. Preserve full-replacement import confirmation, primary/alias uniqueness, and the cursor's surrounding text when expanding.
+- Multiline desktop expansion must not simulate Enter in a target field. Preserve clipboard content when using paste and stop before changing the field if insertion cannot be prepared.
+- Do not create a desktop-only latest release without an official Android APK; the Android updater resolves GitHub's latest release.
 - Preserve cursor-aware replacement: only the trigger immediately before the cursor is replaced, text after the cursor remains intact, and the cursor moves to the end of the expansion.
 - Never make expansion submit or send the target field.
 - Keep every primary trigger and alias globally unique, case-insensitively.

@@ -45,3 +45,8 @@ google-services.json
 .serena/
 AGENTS.md
 PROGRESS.md
+
+# Desktop build output
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+desktop/node_modules/

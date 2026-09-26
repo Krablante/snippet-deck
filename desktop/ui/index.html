@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>SnippetDeck</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <h1>SnippetDeck</h1>
+      <div class="top-actions">
+        <button id="more" class="icon-button" type="button" aria-label="More options" aria-expanded="false">⋯</button>
+        <div id="menu" class="menu" hidden>
+          <button id="import" type="button">Import backup…</button>
+          <button id="export" type="button">Export backup…</button>
+          <div class="menu-divider"></div>
+          <label class="menu-check"><input id="startup" type="checkbox"> Start at login</label>
+          <div class="menu-divider"></div>
+          <div class="menu-label">Appearance</div>
+          <div class="themes" role="group" aria-label="Appearance">
+            <button type="button" data-theme="white">White</button>
+            <button type="button" data-theme="black">Black</button>
+            <button type="button" data-theme="sepia">Sepia</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="library" aria-label="Snippet library">
+        <div class="library-tools">
+          <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search snippets" aria-label="Search snippets"></label>
+          <button id="new" class="add-button" type="button" aria-label="Add snippet">+</button>
+        </div>
+        <div class="service-row">
+          <div><strong>Text expansion</strong><small id="status">Starting…</small></div>
+          <label class="switch" aria-label="Text expansion enabled"><input id="active" type="checkbox" checked><span></span></label>
+        </div>
+        <div id="count" class="count"></div>
+        <div id="list" class="snippet-list"></div>
+        <p id="empty" class="empty" hidden>No snippets yet. Add one to get started.</p>
+      </section>
+
+      <section id="editor" class="editor" aria-label="Snippet editor" hidden>
+        <div class="editor-top">
+          <button id="back" class="back icon-button" type="button" aria-label="Back to library">←</button>
+          <h2 id="editor-title">New snippet</h2>
+          <button id="delete" class="text-button danger" type="button" hidden>Delete</button>
+        </div>
+        <form id="form">
+          <label class="field">Trigger<input id="trigger" name="trigger" required maxlength="40" autocomplete="off" spellcheck="false" placeholder="!review"></label>
+          <label class="field">Aliases <span class="optional">optional · separate with commas</span><input id="aliases" name="aliases" autocomplete="off" spellcheck="false" placeholder="rv, feedback"></label>
+          <label class="field">Expansion<textarea id="expansion" name="expansion" required rows="8" placeholder="Text to insert"></textarea></label>
+          <label class="enabled-row"><span>Enabled</span><span class="switch"><input id="snippet-enabled" type="checkbox" checked><span></span></span></label>
+          <p id="form-error" class="error" role="alert" hidden></p>
+          <button class="save-button" type="submit">Save snippet</button>
+        </form>
+      </section>
+      <section id="welcome" class="welcome" aria-hidden="true">
+        <div class="welcome-mark">→</div>
+        <h2>Your snippets, ready when you are.</h2>
+        <p>Select a snippet or create a new one.</p>
+      </section>
+    </main>
+    <div id="notice" class="notice" role="status" hidden></div>
+    <dialog id="confirm" class="confirm">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-message"></p>
+      <form method="dialog" class="confirm-actions">
+        <button type="submit" value="cancel">Cancel</button>
+        <button id="confirm-action" type="submit" value="yes"></button>
+      </form>
+    </dialog>
+  </div>
+</body>
+</html>

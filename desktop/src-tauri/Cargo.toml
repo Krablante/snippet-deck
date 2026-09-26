@@ -1,0 +1,30 @@
+[package]
+name = "snippet-deck-desktop"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-autostart = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["clock"] }
+base64 = "0.22"
+flate2 = "1"
+arboard = "3"
+rdev = "0.5.3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+enigo = { version = "0.6", default-features = false, features = ["xdo"] }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+rfd = "0.15"
+enigo = { version = "0.6", default-features = false }
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
