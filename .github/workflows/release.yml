@@ -182,11 +182,14 @@ jobs:
           (cd dist/release && sha256sum "snippet-deck-${INPUT_TAG}.apk" "SnippetDeck_${VERSION}_amd64.deb" "SnippetDeck_${VERSION}_x64_en-US.msi" "SnippetDeck_${VERSION}_arm64.dmg" "SnippetDeck_${VERSION}_intel.dmg" > SHA256SUMS.txt)
           test "$(wc -l < dist/release/SHA256SUMS.txt)" -eq 5
           gh release create "$INPUT_TAG" "${ASSETS[@]}" dist/release/SHA256SUMS.txt --draft --target "$GITHUB_SHA" --title "SnippetDeck $INPUT_TAG" --generate-notes --notes "Installers for Android 13+, Windows, macOS (Apple Silicon and Intel), and Linux X11. Snippets remain local; cloud sync is not available. macOS installers are unsigned and may require Open Anyway. Linux Wayland text expansion is unavailable."
+          # Drafts are absent from the releases/tags endpoint until published.
+          RELEASE_ID=$(gh api "repos/${GH_REPO}/releases" --jq ".[] | select(.tag_name == \"${INPUT_TAG}\" and .draft == true) | .id")
+          test -n "$RELEASE_ID"
           for attempt in 1 2 3 4 5 6; do
-            digest=$(gh api "repos/${GH_REPO}/releases/tags/${INPUT_TAG}" --jq ".assets[] | select(.name == \"snippet-deck-${INPUT_TAG}.apk\") | .digest")
+            digest=$(gh api "repos/${GH_REPO}/releases/${RELEASE_ID}" --jq ".assets[] | select(.name == \"snippet-deck-${INPUT_TAG}.apk\") | .digest")
             if [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then break; fi
             sleep 5
           done
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
-          test "$(gh api "repos/${GH_REPO}/releases/tags/${INPUT_TAG}" --jq '.assets | length')" -eq 6
+          test "$(gh api "repos/${GH_REPO}/releases/${RELEASE_ID}" --jq '.assets | length')" -eq 6
           gh release edit "$INPUT_TAG" --draft=false --latest
