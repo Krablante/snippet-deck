@@ -35,9 +35,12 @@ enum class ThemeMode(
 object ThemePreferences {
     private const val PREFS_NAME = "theme_prefs"
     private const val KEY_THEME_MODE = "theme_mode"
+    private const val KEY_REDUCE_TRANSPARENCY = "reduce_transparency"
 
     private val _themeMode = MutableStateFlow(ThemeMode.WHITE)
     val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+    private val _reduceTransparency = MutableStateFlow(false)
+    val reduceTransparency: StateFlow<Boolean> = _reduceTransparency.asStateFlow()
 
     fun init(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -45,6 +48,7 @@ object ThemePreferences {
         val systemDark = context.resources.configuration.uiMode and
             Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         _themeMode.value = ThemeMode.fromStorageValue(savedTheme, systemDark)
+        _reduceTransparency.value = prefs.getBoolean(KEY_REDUCE_TRANSPARENCY, false)
     }
 
     fun setThemeMode(context: Context, mode: ThemeMode) {
@@ -61,5 +65,11 @@ object ThemePreferences {
         val systemDark = context.resources.configuration.uiMode and
             Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         return ThemeMode.fromStorageValue(savedTheme, systemDark)
+    }
+
+    fun setReduceTransparency(context: Context, reduced: Boolean) {
+        _reduceTransparency.value = reduced
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_REDUCE_TRANSPARENCY, reduced).apply()
     }
 }

@@ -2,8 +2,8 @@ package com.rrajath.expander.service
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Context
-import android.content.SharedPreferences
 import android.os.Bundle
+import android.os.UserManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.os.bundleOf
@@ -18,8 +18,8 @@ import kotlinx.coroutines.flow.first
 class TextExpansionService : AccessibilityService() {
 
     private lateinit var repository: SnippetRepository
-    private lateinit var prefs: SharedPreferences
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var libraryInitialized = false
 
     private var snippetsByTrigger: Map<String, Snippet> = emptyMap()
     private var lastExpansion: CursorExpansionEngine.ExpansionHistory? = null
@@ -57,9 +57,14 @@ class TextExpansionService : AccessibilityService() {
 
     override fun onCreate() {
         super.onCreate()
+        initializeLibraryIfUnlocked()
+    }
+
+    private fun initializeLibraryIfUnlocked() {
+        if (libraryInitialized || getSystemService(UserManager::class.java)?.isUserUnlocked != true) return
+        libraryInitialized = true
         val database = AppDatabase.getDatabase(applicationContext)
         repository = SnippetRepository(database.snippetDao())
-        prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         // Load snippets into cache
         serviceScope.launch {
             repository.getEnabledSnippets().collect { snippets ->
@@ -76,6 +81,8 @@ class TextExpansionService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
+        initializeLibraryIfUnlocked()
+        if (!libraryInitialized) return
         if (!isServiceEnabled(this)) return
 
         // Only process text change events

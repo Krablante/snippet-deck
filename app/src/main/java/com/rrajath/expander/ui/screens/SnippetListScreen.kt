@@ -1,6 +1,7 @@
 package com.rrajath.expander.ui.screens
 
 import android.content.Intent
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -15,7 +16,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
@@ -26,9 +26,14 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.rrajath.expander.data.Snippet
 import com.rrajath.expander.service.TextExpansionService
 import com.rrajath.expander.ui.components.SearchBar
+import com.rrajath.expander.ui.components.glassControl
+import com.rrajath.expander.sync.SyncUiState
+import com.rrajath.expander.util.ThemePreferences
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
 
 @Composable
-fun SnippetListScreen(
+internal fun SnippetListScreen(
     snippets: List<Snippet>,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
@@ -37,28 +42,41 @@ fun SnippetListScreen(
     onSnippetToggle: (Snippet) -> Unit,
     onAddClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    syncState: SyncUiState,
+    syncConnected: Boolean,
+    onSyncClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var accessibilityEnabled by remember { mutableStateOf(TextExpansionService.isAccessibilityServiceEnabled(context)) }
     var serviceEnabled by remember { mutableStateOf(TextExpansionService.isServiceEnabled(context)) }
+    var highContrast by remember {
+        mutableStateOf(Settings.Secure.getInt(context.contentResolver, "high_text_contrast_enabled", 0) == 1)
+    }
+    var powerSave by remember { mutableStateOf(context.getSystemService(PowerManager::class.java)?.isPowerSaveMode == true) }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 accessibilityEnabled = TextExpansionService.isAccessibilityServiceEnabled(context)
                 serviceEnabled = TextExpansionService.isServiceEnabled(context)
+                highContrast = Settings.Secure.getInt(context.contentResolver, "high_text_contrast_enabled", 0) == 1
+                powerSave = context.getSystemService(PowerManager::class.java)?.isPowerSaveMode == true
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     val colors = MaterialTheme.colorScheme
+    val reduceTransparency by ThemePreferences.reduceTransparency.collectAsState()
+    val opaqueControls = reduceTransparency || highContrast || powerSave
+    val hazeState = remember { HazeState() }
 
     Box(modifier = modifier.fillMaxSize().background(colors.background).statusBarsPadding().navigationBarsPadding()) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = 116.dp, bottom = 96.dp),
+            modifier = Modifier.fillMaxSize().padding(top = 8.dp)
+                .then(if (opaqueControls) Modifier else Modifier.haze(state = hazeState)),
+            contentPadding = PaddingValues(top = 58.dp, bottom = 94.dp),
         ) {
             if (!accessibilityEnabled || !serviceEnabled) {
                 item {
@@ -106,28 +124,76 @@ fun SnippetListScreen(
             }
         }
 
-        Column(
-            modifier = Modifier.fillMaxWidth().background(
-                Brush.verticalGradient(listOf(colors.background, colors.background.copy(alpha = 0.96f), colors.background.copy(alpha = 0f)))
-            ).padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 13.dp),
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                .height(52.dp).glassControl(
+                    hazeState,
+                    opaqueControls,
+                    androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+                    tintAlpha = 0.72f,
+                ).padding(start = 12.dp, end = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(48.dp)) {
-                Text("SnippetDeck", modifier = Modifier.weight(1f).padding(start = 4.dp), style = MaterialTheme.typography.titleLarge, color = colors.onBackground)
-                IconButton(onClick = onSettingsClick) {
-                    Icon(Icons.Default.Settings, contentDescription = "Settings", tint = colors.onBackground)
+            Text(
+                "SnippetDeck",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleLarge,
+                color = colors.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            val label = when {
+                syncState is SyncUiState.Conflict -> "Resolve"
+                syncState is SyncUiState.Failed -> "Retry"
+                syncState is SyncUiState.Working -> "Syncing"
+                !syncConnected -> "Connect"
+                syncState is SyncUiState.Synced -> "Synced"
+                else -> "Sync"
+            }
+            TextButton(
+                onClick = { if (syncState is SyncUiState.Conflict) onSettingsClick() else onSyncClick() },
+                enabled = syncState !is SyncUiState.Working,
+                modifier = Modifier.height(48.dp).widthIn(min = 64.dp),
+                contentPadding = PaddingValues(horizontal = 6.dp),
+            ) {
+                if (syncState is SyncUiState.Working) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (syncState is SyncUiState.Failed || syncState is SyncUiState.Conflict) colors.error else colors.onSurface,
+                    )
                 }
             }
-            SearchBar(query = searchQuery, onQueryChange = onSearchQueryChange, modifier = Modifier.fillMaxWidth())
+            IconButton(onClick = onSettingsClick) {
+                Icon(Icons.Default.Settings, contentDescription = "Settings", tint = colors.onBackground)
+            }
         }
 
-        FloatingActionButton(
-            onClick = onAddClick,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 18.dp),
-            containerColor = colors.primary,
-            contentColor = colors.onPrimary,
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+        Row(
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().imePadding()
+                .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Default.Add, contentDescription = "Add snippet")
+            SearchBar(
+                query = searchQuery,
+                onQueryChange = onSearchQueryChange,
+                hazeState = hazeState,
+                opaque = opaqueControls,
+                modifier = Modifier.weight(1f),
+            )
+            FloatingActionButton(
+                onClick = onAddClick,
+                modifier = Modifier.size(52.dp),
+                containerColor = colors.primary,
+                contentColor = colors.onPrimary,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 2.dp, pressedElevation = 4.dp),
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add snippet")
+            }
         }
     }
 }

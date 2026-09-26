@@ -38,9 +38,11 @@ Android: **Settings → Backup & transfer** exports a JSON file or compact text,
 
 The working library stays in each device's app data. Keep backup files somewhere you control; they can contain sensitive text. Old raw-array JSON, v1.0 JSON, and text V1 backups remain readable.
 
+On Android the floating toolbar and search blur snippets beneath them. Turn on **Settings → Appearance → Reduce transparency** for solid controls. The app also uses solid controls when high contrast or power saving is active.
+
 ## Sync with Google Drive (optional)
 
-On Android, choose **Settings → Google Drive sync → Connect Google Drive**. On desktop, choose **Connect** in the library. Sign in to the same account on each device. SnippetDeck uses only its own hidden `appDataFolder`, never your other Drive files. It syncs on app open, after local saves, or on a manual request, without background polling. Offline changes stay local until the next sync.
+On Android, tap **Connect** in the library toolbar; once connected, use the same control to sync again. A conflict changes it to **Resolve** and opens the choices in Settings. On desktop, choose **Connect** in the library. Sign in to the same account on each device. SnippetDeck uses only its own hidden `appDataFolder`, never your other Drive files. It syncs on app open, after local saves, or on a manual request, without background polling. Offline changes stay local until the next sync.
 
 Independent changes merge, including deletions. If two devices edit the same trigger before exchanging changes, SnippetDeck asks you to choose a copy. Export backups from both devices before resolving a conflict. **Use other device** applies only when one other device is connected. Disconnecting stops sync on that device and keeps its local library; it does not remove the files already in Drive. Snippets in Drive are **not end-to-end encrypted**. See the [privacy policy](../PRIVACY.md).
 

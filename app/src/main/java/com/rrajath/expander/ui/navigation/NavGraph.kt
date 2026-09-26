@@ -244,7 +244,10 @@ internal fun NavGraph(
                 },
                 onSettingsClick = {
                     navController.navigate(Screen.Settings.route)
-                }
+                },
+                syncState = syncState,
+                syncConnected = syncViewModel.connected(),
+                onSyncClick = { syncWithGoogle() },
             )
         }
 
@@ -327,7 +330,6 @@ internal fun NavGraph(
                 syncConnected = syncViewModel.connected(),
                 syncHasHistory = syncViewModel.hasHistory(),
                 snippetCount = allSnippets.size,
-                onSync = { syncWithGoogle() },
                 onDisconnectSync = syncViewModel::disconnect,
                 onResetSync = syncViewModel::reset,
                 onReplaceCloud = { syncWithGoogle(SyncViewModel.SyncChoice.THIS_DEVICE) },

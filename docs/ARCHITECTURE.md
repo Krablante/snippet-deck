@@ -38,6 +38,8 @@ The two apps share formats, not runtime code. Android storage and system permiss
 
 Nodes that do not expose selection information use an end-of-field fallback. The service never submits the target field.
 
+The accessibility service waits for device unlock before opening its credential-protected snippet library. The first accessibility event after unlock starts its library observation if the service was created during boot.
+
 Immediate Backspace restores the typed trigger at its original cursor location where the target node supports the required editing actions. Dynamic placeholders are resolved immediately before insertion, and virtual `!help` is generated from enabled snippets.
 
 The desktop Rust agent observes keyboard events through `rdev` and replaces the immediately preceding typed trigger through `enigo`. It keeps no field text on disk. The editor is a Tauri WebView that can close while the agent stays in the tray, releasing the WebView process when it is not needed. Single-line text is inserted through native input; Linux X11 uses the fast `libxdo` backend. Multiline text uses a paste operation so a simulated Enter cannot submit the target field. The app temporarily owns the clipboard and restores its previous supported content after paste, unless the user copied something else meanwhile. The agent does not inspect the entire target field: mouse clicks, navigation, or shortcuts clear its short in-memory trigger buffer. It works on Windows and macOS and on Linux X11; Wayland text expansion is deliberately disabled. The desktop engine maintains a lookup table for triggers and aliases and rebuilds it only after the library changes.
@@ -64,7 +66,7 @@ Libraries allow up to 10,000 snippets and 2 MB of backup JSON. Saves serialize t
 
 The Compose interface provides snippet editing, search, enabled state, accessibility onboarding, theme selection, backup and transfer, Google Drive connection, and manual update checks. Import always previews the source and snippet count and warns that the current library will be replaced.
 
-Chalk, Ink, and Parchment use deterministic Material 3 schemes. Their stored values remain `white`, `black`, and `sepia` so existing preferences still load; legacy Light/Dark/System values migrate to the nearest option. Dynamic wallpaper colors are disabled to keep contrast predictable. The snippet list is a continuous surface with controls above it; the editor keeps form fields on an opaque canvas and offers placeholders on demand.
+Chalk, Ink, and Parchment use deterministic Material 3 schemes. Their stored values remain `white`, `black`, and `sepia` so existing preferences still load; legacy Light/Dark/System values migrate to the nearest option. Dynamic wallpaper colors are disabled to keep contrast predictable. The continuous snippet list runs beneath a compact toolbar and bottom search. Haze captures only that list for the glass controls; the capture is skipped for solid controls when reduced transparency, high contrast, or power saving is active. Forms remain opaque and placeholders open on demand.
 
 UI state is owned by view models and repositories rather than composables. Platform actions such as document selection and clipboard access remain at the UI boundary.
 

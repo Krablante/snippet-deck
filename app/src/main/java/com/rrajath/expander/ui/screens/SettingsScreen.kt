@@ -17,6 +17,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -42,7 +44,6 @@ internal fun SettingsScreen(
     syncState: SyncUiState = SyncUiState.Off,
     syncConnected: Boolean = false,
     syncHasHistory: Boolean = false,
-    onSync: () -> Unit = {},
     onDisconnectSync: () -> Unit = {},
     onResetSync: () -> Unit = {},
     onReplaceCloud: () -> Unit = {},
@@ -62,6 +63,7 @@ internal fun SettingsScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     var currentTheme by remember { mutableStateOf(ThemePreferences.getThemeMode(context)) }
+    val reduceTransparency by ThemePreferences.reduceTransparency.collectAsState()
     var showThemeDialog by remember { mutableStateOf(false) }
     var showTextImportDialog by remember { mutableStateOf(false) }
     var showReplaceCloudDialog by remember { mutableStateOf(false) }
@@ -199,23 +201,26 @@ internal fun SettingsScreen(
                 },
                 onClick = { showThemeDialog = true }
             )
-            SettingsSection("Google Drive")
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(when (syncState) {
+                Text("Reduce transparency", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                Switch(
+                    checked = reduceTransparency,
+                    onCheckedChange = { ThemePreferences.setReduceTransparency(context, it) },
+                    modifier = Modifier.semantics { contentDescription = "Reduce transparency" },
+                )
+            }
+            SettingsSection("Google Drive")
+            Text(when (syncState) {
                     SyncUiState.Off -> "Not connected"
                     SyncUiState.Ready -> "Connected"
                     SyncUiState.Working -> "Syncing…"
                     is SyncUiState.Synced -> "Up to date · ${syncState.count} snippets"
                     is SyncUiState.Conflict -> "Conflicts: ${syncState.triggers.joinToString()}"
                     is SyncUiState.Failed -> "Sync failed: ${syncState.message}"
-                }, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                Button(onClick = onSync, enabled = syncState != SyncUiState.Working) {
-                    Text(if (syncConnected) "Sync now" else "Connect")
-                }
-            }
+                }, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium)
             if (!syncConnected) {
                 Text("Optional · your snippets in Google Drive are readable by Google", modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
