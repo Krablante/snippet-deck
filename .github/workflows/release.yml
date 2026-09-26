@@ -82,7 +82,7 @@ jobs:
           test -f "$APK"
           test "$(bash "$APKANALYZER" manifest application-id "$APK")" = "com.rrajath.expander"
           test "$(bash "$APKANALYZER" manifest version-name "$APK")" = "$EXPECTED_VERSION"
-          test "$(bash "$APKANALYZER" manifest version-code "$APK")" = "10700"
+          test "$(bash "$APKANALYZER" manifest version-code "$APK")" = "10701"
           "$APKSIGNER" verify --verbose "$APK"
 
           ACTUAL_SIGNER_SHA256=$("$APKSIGNER" verify --print-certs "$APK" 2>&1 | grep -oE '[[:xdigit:]]{64}' | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -d '\r\n')
@@ -138,6 +138,9 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libx11-dev libxtst-dev libxdo-dev patchelf
       - name: Build installer
+        env:
+          SNIPPETDECK_OFFICIAL_BUILD: "1"
+          SNIPPETDECK_DESKTOP_OAUTH_CLIENT_SECRET: ${{ secrets.SNIPPETDECK_DESKTOP_OAUTH_CLIENT_SECRET }}
         run: npx --yes @tauri-apps/cli@2.11.5 build --bundles ${{ matrix.bundle }} --ci --no-sign -- --locked
       - name: Upload installer
         uses: actions/upload-artifact@v4

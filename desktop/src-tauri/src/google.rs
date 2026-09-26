@@ -38,6 +38,7 @@ pub fn forget_refresh() {
 pub fn refresh(token: &str) -> Result<Access, String> {
     let form = url::form_urlencoded::Serializer::new(String::new())
         .append_pair("client_id", CLIENT_ID)
+        .append_pair("client_secret", desktop_client_secret()?)
         .append_pair("refresh_token", token)
         .append_pair("grant_type", "refresh_token")
         .finish();
@@ -45,6 +46,7 @@ pub fn refresh(token: &str) -> Result<Access, String> {
 }
 
 pub fn authorize() -> Result<Access, String> {
+    let client_secret = desktop_client_secret()?;
     let listener = TcpListener::bind("127.0.0.1:0")
         .map_err(|e| format!("Cannot open browser callback: {e}"))?;
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
@@ -135,6 +137,7 @@ pub fn authorize() -> Result<Access, String> {
     let form = url::form_urlencoded::Serializer::new(String::new())
         .append_pair("code", &code)
         .append_pair("client_id", CLIENT_ID)
+        .append_pair("client_secret", client_secret)
         .append_pair("code_verifier", &verifier)
         .append_pair("redirect_uri", &redirect)
         .append_pair("grant_type", "authorization_code")
@@ -143,15 +146,25 @@ pub fn authorize() -> Result<Access, String> {
 }
 
 fn exchange(form: &str, old_refresh: Option<String>) -> Result<Access, String> {
-    let mut response = agent()
+    let mut response = agent(false)
         .post("https://oauth2.googleapis.com/token")
         .header("Content-Type", "application/x-www-form-urlencoded")
         .send(form)
-        .map_err(|_| "Google sign-in failed; reconnect the account")?;
+        .map_err(|e| format!("Cannot reach Google sign-in: {e}"))?;
+    let status = response.status().as_u16();
     let result: Value = response
         .body_mut()
         .read_json()
         .map_err(|_| "Invalid Google sign-in response")?;
+    if !(200..300).contains(&status) {
+        let code = result.get("error").and_then(Value::as_str);
+        return Err(match code {
+            Some("invalid_client") => "Google rejected the desktop OAuth client (invalid_client)".into(),
+            Some("invalid_request") => "Google rejected the desktop sign-in request (invalid_request)".into(),
+            Some("invalid_grant") => "Google sign-in expired or was rejected (invalid_grant); try again".into(),
+            _ => format!("Google sign-in failed (HTTP {status})"),
+        });
+    }
     let refresh = result
         .get("refresh_token")
         .and_then(Value::as_str)
@@ -176,9 +189,17 @@ fn exchange(form: &str, old_refresh: Option<String>) -> Result<Access, String> {
     })
 }
 
-fn agent() -> ureq::Agent {
+fn desktop_client_secret() -> Result<&'static str, String> {
+    option_env!("SNIPPETDECK_DESKTOP_OAUTH_CLIENT_SECRET")
+        .map(str::trim)
+        .filter(|secret| !secret.is_empty())
+        .ok_or_else(|| "Google Drive sign-in is unavailable in this desktop build".into())
+}
+
+fn agent(http_status_as_error: bool) -> ureq::Agent {
     ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(30)))
+        .http_status_as_error(http_status_as_error)
         .build()
         .into()
 }
@@ -197,7 +218,7 @@ pub struct Drive {
 impl Drive {
     pub fn new(token: String) -> Self {
         Self {
-            agent: agent(),
+            agent: agent(true),
             token,
         }
     }
