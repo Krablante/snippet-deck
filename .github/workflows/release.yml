@@ -38,6 +38,41 @@ jobs:
             exit 1
           fi
 
+      - name: Verify desktop OAuth client secret
+        env:
+          DESKTOP_OAUTH_CLIENT_SECRET: ${{ secrets.SNIPPETDECK_DESKTOP_OAUTH_CLIENT_SECRET }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          secret = os.environ.get("DESKTOP_OAUTH_CLIENT_SECRET", "").strip()
+          if not secret:
+              raise SystemExit("Missing SNIPPETDECK_DESKTOP_OAUTH_CLIENT_SECRET")
+          form = urllib.parse.urlencode({
+              "client_id": "356275794423-basgnoa6re20s3daa4vep06l2g7fv04n.apps.googleusercontent.com",
+              "client_secret": secret,
+              "code": "invalid-test-code",
+              "code_verifier": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "redirect_uri": "http://127.0.0.1:9004",
+              "grant_type": "authorization_code",
+          }).encode()
+          request = urllib.request.Request("https://oauth2.googleapis.com/token", data=form)
+          try:
+              urllib.request.urlopen(request, timeout=20).close()
+          except urllib.error.HTTPError as error:
+              # A valid client secret passes authentication; the dummy code then fails.
+              if json.load(error).get("error") == "invalid_grant":
+                  print("Desktop OAuth credential accepted by Google")
+              else:
+                  raise SystemExit("Google rejected the desktop OAuth credential")
+          else:
+              raise SystemExit("Unexpected success for an invalid OAuth code")
+          PY
+
   android:
     needs: validate
     runs-on: ubuntu-latest
