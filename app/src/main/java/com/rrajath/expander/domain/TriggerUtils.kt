@@ -76,6 +76,12 @@ object TriggerUtils {
     ): Boolean = allTriggers(primaryTrigger, aliases)
         .any { it.equals(candidate, ignoreCase = true) }
 
+    // String.equals(ignoreCase = true) compares Unicode characters after simple case folding.
+    // A full String.lowercase() can expand one character into several and change that match.
+    fun matchKey(value: String): String = buildString(value.length) {
+        value.forEach { append(it.uppercaseChar().lowercaseChar()) }
+    }
+
     fun allTriggers(primaryTrigger: String, aliases: List<String>): List<String> =
         listOf(normalize(primaryTrigger)) + aliases.map(::normalizeAlias)
 

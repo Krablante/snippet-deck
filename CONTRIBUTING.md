@@ -1,50 +1,37 @@
-# Contributing
+![Development](https://img.shields.io/badge/Category-Development-47795e) [![EN](https://img.shields.io/badge/Language-EN-47795e)](CONTRIBUTING.md) [![RU](https://img.shields.io/badge/Language-RU-806d5e)](docs/ru/CONTRIBUTING.md)
 
-Thank you for helping improve SnippetDeck. Small, focused changes with clear tests are the easiest to review and maintain.
+# Develop SnippetDeck
 
-## Development setup
+The repository has two applications with a shared user-facing backup and sync format. Android lives under `app/` and uses Kotlin, Room, Compose, and AccessibilityService. Desktop lives under `desktop/` and uses Rust, Tauri, and a static web editor. Pick the platform toolchain you need; changing desktop code does not require an Android SDK.
 
-Pick the toolchain for the platform you are changing. Android development needs JDK 17, Android SDK 36, and an Android 13+ device or emulator.
+## Android
 
-Desktop development uses Rust and the [Tauri system prerequisites](https://v2.tauri.app/start/prerequisites/) (`libxdo-dev` is also needed on Debian/Ubuntu). From `desktop/src-tauri`, run `cargo build --locked`. The desktop UI is static and does not need an npm dependency install. The `Desktop builds` workflow packages on each target OS.
-
-For Android, create an ignored `local.properties` with your SDK location or open the project in Android Studio, then run:
+Install JDK 17 and Android SDK 36. Set your SDK path in an ignored `local.properties` (see `local.properties.example`) or open the project in Android Studio. An Android 13+ device or emulator is needed for interactive testing.
 
 ```bash
 ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --max-workers=2
 ```
 
-Debug builds use the `.debug` application ID suffix and can be installed alongside an official release. For desktop, run `cargo test --locked` from `desktop/src-tauri` to check the Rust code.
+The debug APK appears under `app/build/outputs/apk/debug/` with a `.debug` application ID, so it can coexist with the official build. Accessibility changes need a real typing check in more than one target editor; unit tests cannot represent every accessibility node.
 
-## Change guidelines
+## Windows, macOS, and Linux
 
-- Keep the architecture local-first and avoid introducing services or dependencies without a concrete product need.
-- Desktop local data must remain compatible with Android JSON and text backups. Preserve full-replacement import confirmation, primary/alias uniqueness, and the cursor's surrounding text when expanding.
-- Multiline desktop expansion must not simulate Enter in a target field. Preserve clipboard content when using paste and stop before changing the field if insertion cannot be prepared.
-- Every stable release must contain the verified official signed Android APK alongside the desktop installers; the Android updater resolves GitHub's latest release.
-- Preserve cursor-aware replacement: only the trigger immediately before the cursor is replaced, text after the cursor remains intact, and the cursor moves to the end of the expansion.
-- Never make expansion submit or send the target field.
-- Keep every primary trigger and alias globally unique, case-insensitively.
-- Preserve plain aliases exactly as entered after trimming; do not automatically prefix them with `!`.
-- Treat the application ID, package namespace, Room database name, preferences filenames, and release signing identity as compatibility contracts.
-- Add explicit Room migrations for schema changes and tests for every supported upgrade path.
-- Preserve current and legacy backup compatibility unless a documented migration path is provided.
-- Keep GitHub update checks separate from optional Google Drive sync. Never embed access or refresh tokens, request access to all Drive files, add a server backend, or poll in the background. A cloud edit must not overwrite concurrent local work silently.
-- Preserve the exact release asset name, semantic version, increasing version code, package ID, SHA-256 verification, and pinned signing identity required by installed updates.
-- Keep White, Black, and Sepia deterministic; do not re-enable wallpaper-derived dynamic colors. New UI must remain legible in all three palettes and preserve migration of legacy Light/Dark/System values.
-- Do not commit SDK paths, keystores, credentials, APKs, exported backups, device data, or local agent/editor state.
+Install Rust and the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS. Debian/Ubuntu also need `libxdo-dev`. The editor under `desktop/ui/` has no frontend package install.
 
-## Tests
+```bash
+cd desktop/src-tauri
+cargo test --locked
+cargo build --locked
+```
 
-Choose the narrowest useful test and keep the full verification command green.
+The binary is under `desktop/src-tauri/target/debug/` unless you set `CARGO_TARGET_DIR`. Google Drive sign-in in a local build also needs the `SNIPPETDECK_DESKTOP_OAUTH_CLIENT_SECRET` build environment variable; other features work without it. Do not put credentials in source or logs. GitHub Actions packages each OS on a matching runner; see [Operations](docs/OPERATIONS.md) for official releases.
 
-- Unit tests cover snippet validation, aliases, placeholders, backup codecs, import semantics, release parsing, semantic versions, digest checks, and update presentation.
-- Instrumented tests cover Android-specific behavior and Compose flows.
-- Changes to accessibility expansion should also be exercised manually in more than one editable target because apps expose accessibility nodes differently.
-- Changes to backup or database formats require round-trip and migration coverage.
+## Change carefully
 
-## Pull requests
+Keep trigger matching at the cursor, preserve text after it, and never submit a target field. Primary triggers and aliases must remain globally unique without regard to case. Desktop multiline expansion must paste rather than simulate Enter. Respect installed Android identifiers, Room migrations, the signing identity, backup readers, and the `snippetdeck-sync` format; old installations still need to read their data after an update.
 
-Describe the user-visible outcome, important implementation choices, and how the change was verified. Keep unrelated refactors out of the same pull request. Include screenshots or a short recording when the UI changes materially.
+Use the narrowest test that proves a change. Backup and database changes need a round trip or migration check, and UI changes need a screenshot or hands-on check. Keep snippets local unless a user connects Google Drive; do not add a backend, tokens in installers, or background polling. A release must include the official signed Android APK and all four desktop installers in the same stable GitHub release.
 
-By contributing, you agree that your work is distributed under the repository's [MIT License](LICENSE).
+Explain the user-visible result and verification in a pull request. Small focused patches are easier to review than unrelated cleanup. Contributions are distributed under the [MIT License](LICENSE); upstream Expander attribution stays intact.
+
+[← Project overview](README.md) · [Guide](docs/GUIDE.md) · [Architecture](docs/ARCHITECTURE.md)

@@ -27,6 +27,8 @@ class TriggerUtilsTest {
     fun `matching is case insensitive for primary and aliases`() {
         assertTrue(TriggerUtils.matches("!MAIN", "!main", listOf("!alias")))
         assertTrue(TriggerUtils.matches("ALIAS", "!main", listOf("alias")))
+        assertEquals(TriggerUtils.matchKey("!İ"), TriggerUtils.matchKey("!i"))
+        assertEquals(TriggerUtils.matchKey("КК"), TriggerUtils.matchKey("кк"))
     }
 
     @Test

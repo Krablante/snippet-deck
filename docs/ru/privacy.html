@@ -1,0 +1,43 @@
+<!doctype html>
+<!-- Публичная версия PRIVACY.md этого языка. Обновляйте их вместе. -->
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Какие данные SnippetDeck хранит локально и передаёт в Google Drive и GitHub при вашем выборе.">
+  <title>Конфиденциальность — SnippetDeck</title>
+  <link rel="icon" href="../images/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://krablante.github.io/snippet-deck/ru/privacy.html">
+  <link rel="alternate" hreflang="en" href="https://krablante.github.io/snippet-deck/privacy.html">
+  <link rel="stylesheet" href="../site.css">
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <a class="brand" href="./">SnippetDeck</a>
+      <nav aria-label="Навигация">
+        <a href="./">Главная</a>
+        <a href="https://github.com/Krablante/snippet-deck/releases/latest">Скачать</a>
+        <a href="https://github.com/Krablante/snippet-deck">Исходный код</a>
+        <span class="language-switch" aria-label="Язык"><a class="sticker" href="../privacy.html">EN</a><span class="sticker active" aria-current="page">RU</span></span>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap document">
+    <span class="sticker category">Конфиденциальность</span>
+    <h1>Ваши данные в SnippetDeck</h1>
+    <p>SnippetDeck подставляет сохранённый текст в поля ввода. Служба специальных возможностей Android и desktop-агент наблюдают за вводом ровно настолько, чтобы распознать триггер. Введённый текст из других приложений не сохраняется и никуда не отправляется. Созданные сниппеты хранятся локально.</p>
+
+    <h2>Необязательная синхронизация через Google Drive</h2>
+    <p>Если вы выбрали <strong>Connect Google Drive</strong>, приложение запрашивает разрешение <code>drive.appdata</code>. Оно читает и записывает только собственную папку данных в вашем Drive, а не остальные файлы. Для синхронизации туда передаются сниппеты, псевдонимы, тексты замен, состояния включения, временные метки, записи удалений и случайные идентификаторы устройств. Эти файлы занимают место в Drive. Google обрабатывает и хранит данные вашего аккаунта; <strong>SnippetDeck не применяет сквозное шифрование</strong>. У разработчика нет сервера, получающего вашу библиотеку или токены Google.</p>
+    <p>На Android вход обрабатывают Google Play services. На компьютере приложение открывает системный браузер и по возможности хранит токен обновления в хранилище учётных данных ОС. Если постоянное хранилище недоступно, вход действует только в текущем сеансе приложения. Токены не попадают в резервные копии. Отключение прекращает дальнейшую синхронизацию на устройстве и сохраняет локальные сниппеты, но не удаляет файлы из Drive. Вы можете отозвать доступ в <a href="https://myaccount.google.com/connections">подключённых приложениях аккаунта Google</a> и удалить скрытые данные в управлении приложениями Google Drive.</p>
+
+    <h2>Остальные передачи данных</h2>
+    <p>Android и desktop обращаются к GitHub за публичными данными релиза и загружают установщик только после вашего согласия. Сниппеты не входят в запросы обновления. Резервные копии файлом и через буфер обмена попадают только туда, куда вы сами их сохраняете или вставляете. При многострочной подстановке на компьютере текст временно проходит через системный буфер обмена; локальные менеджеры буфера могут сохранить его.</p>
+    <p>В SnippetDeck нет аналитики, рекламы, собственной учётной записи и серверной части. Вопросы о данных можно задать через <a href="https://github.com/Krablante/snippet-deck/issues">GitHub Issues</a>.</p>
+  </main>
+
+  <footer><div class="wrap"><p>SnippetDeck распространяется с открытым исходным кодом по лицензии MIT.</p><a href="./">Главная</a></div></footer>
+</body>
+</html>

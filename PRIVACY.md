@@ -1,3 +1,5 @@
+![Privacy](https://img.shields.io/badge/Category-Privacy-47795e) [![EN](https://img.shields.io/badge/Language-EN-47795e)](PRIVACY.md) [![RU](https://img.shields.io/badge/Language-RU-806d5e)](docs/ru/PRIVACY.md)
+
 # SnippetDeck privacy
 
 SnippetDeck expands text you type into editable fields. The Android accessibility service and desktop keyboard agent observe enough input to recognize triggers. They do not store or upload the text you type in other apps. Snippets you create are stored locally on your device.
@@ -13,3 +15,5 @@ On Android, Google Play services handles authorization. On desktop, the app open
 On Android and desktop, SnippetDeck contacts GitHub to check public release metadata and downloads an installer only with your approval. No snippet content is included in update requests. Manual file and clipboard backups contain your snippets and go only where you choose to save or paste them. Desktop multiline insertion temporarily uses the system clipboard; local clipboard managers may retain that text.
 
 There is no analytics, advertising, SnippetDeck account, or SnippetDeck backend. For questions or privacy requests, open a [GitHub issue](https://github.com/Krablante/snippet-deck/issues).
+
+[← Project overview](README.md) · [Guide](docs/GUIDE.md)

@@ -355,9 +355,12 @@ impl Drive {
             .header("Authorization", &format!("Bearer {}", self.token))
             .call()
             .map_err(|error| format!("Google Drive request failed: {error}"))?;
-        let body = response
+        let mut body = String::new();
+        response
             .body_mut()
-            .read_to_string()
+            .as_reader()
+            .take((MAX_BYTES + 1) as u64)
+            .read_to_string(&mut body)
             .map_err(|e| e.to_string())?;
         if body.len() > MAX_BYTES {
             return Err("Google Drive response is too large".into());

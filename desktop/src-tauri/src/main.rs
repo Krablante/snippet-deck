@@ -569,7 +569,7 @@ fn main() {
             let menu = Menu::with_items(app, &[&open, &toggle, &quit])?;
             TrayIconBuilder::new()
                 .icon(tauri::image::Image::from_bytes(include_bytes!(
-                    "../../../design/app_icons/play-store/ic_launcher-playstore.png"
+                    "../icons/icon.png"
                 ))?)
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {

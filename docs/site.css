@@ -20,6 +20,11 @@ header { border-bottom: 1px solid #e1e6dd; background: #fff; }
 header .wrap { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-block: 18px; }
 .brand { color: #202c27; font-weight: 750; font-size: 1.15rem; text-decoration: none; letter-spacing: -.03em; }
 nav { display: flex; gap: 22px; flex-wrap: wrap; font-size: .95rem; }
+.language-switch, .platform-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.sticker { display: inline-flex; align-items: center; padding: 3px 9px; border: 1px solid #d7e4d9; border-radius: 6px; background: #eaf3ec; color: #21573a; font-size: .75rem; font-weight: 700; line-height: 1.5; text-decoration: none; white-space: nowrap; }
+.sticker.active { background: #26724c; border-color: #26724c; color: #fff; }
+.sticker.category { margin-bottom: 18px; }
+.platform-tags { margin-top: 18px; }
 
 .hero { padding-block: clamp(58px, 9vw, 108px) 54px; }
 .eyebrow { color: #327654; font-size: .85rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
@@ -57,6 +62,7 @@ footer p { margin: 0; }
   .platform-previews { grid-template-columns: 1fr; }
   .platform-previews figure + figure { max-width: 230px; margin-inline: auto; }
   header .wrap { align-items: flex-start; flex-direction: column; gap: 9px; }
+  nav { gap: 12px; }
   .hero { padding-bottom: 36px; }
   .panel { padding: 24px; }
 }

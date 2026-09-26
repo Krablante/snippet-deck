@@ -21,7 +21,7 @@ class TextExpansionService : AccessibilityService() {
     private lateinit var prefs: SharedPreferences
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    private var snippetsCache: List<Snippet> = emptyList()
+    private var snippetsByTrigger: Map<String, Snippet> = emptyMap()
     private var lastExpansion: CursorExpansionEngine.ExpansionHistory? = null
     private var pendingAppliedText: String? = null
 
@@ -63,7 +63,13 @@ class TextExpansionService : AccessibilityService() {
         // Load snippets into cache
         serviceScope.launch {
             repository.getEnabledSnippets().collect { snippets ->
-                snippetsCache = snippets + DynamicHelp.asVirtualSnippet(snippets)
+                snippetsByTrigger = buildMap {
+                    for (snippet in snippets + DynamicHelp.asVirtualSnippet(snippets)) {
+                        for (trigger in TriggerUtils.allTriggers(snippet.trigger, snippet.aliases)) {
+                            putIfAbsent(TriggerUtils.matchKey(trigger), snippet)
+                        }
+                    }
+                }
             }
         }
     }
@@ -127,13 +133,7 @@ class TextExpansionService : AccessibilityService() {
             selectionEnd = selectionEnd
         ) ?: return
 
-        val matchingSnippet = snippetsCache.firstOrNull { snippet ->
-            TriggerUtils.matches(
-                candidate = occurrence.typedTrigger,
-                primaryTrigger = snippet.trigger,
-                aliases = snippet.aliases
-            )
-        } ?: return
+        val matchingSnippet = snippetsByTrigger[TriggerUtils.matchKey(occurrence.typedTrigger)] ?: return
 
         val processedExpansion = SnippetProcessor.process(matchingSnippet.expansion)
         val result = CursorExpansionEngine.expand(occurrence, processedExpansion)

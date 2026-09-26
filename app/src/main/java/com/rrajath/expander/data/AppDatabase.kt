@@ -32,8 +32,8 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL(
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
                     "ALTER TABLE snippets ADD COLUMN aliases TEXT NOT NULL DEFAULT '[]'"
                 )
             }

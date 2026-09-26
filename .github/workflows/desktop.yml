@@ -3,8 +3,14 @@ name: Desktop builds
 on:
   push:
     branches: [main]
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop.yml'
   workflow_dispatch:
 
 jobs:

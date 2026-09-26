@@ -1,3 +1,5 @@
+![Architecture](https://img.shields.io/badge/Category-Architecture-47795e) [![EN](https://img.shields.io/badge/Language-EN-47795e)](ARCHITECTURE.md) [![RU](https://img.shields.io/badge/Language-RU-806d5e)](ru/ARCHITECTURE.md)
+
 # Architecture
 
 ## Goals
@@ -15,21 +17,19 @@ The design prioritizes:
 ## System overview
 
 ```text
-Compose UI ──► SnippetRepository ──► Room database
-    │                 │
-    │                 └────────────► accessibility cache
-    │                                      │
-    ├──► backup/import UI                  ▼
-    ├──► optional Drive sync
-    └──► UpdateViewModel       TextExpansionService
-              │                          │
-              ▼                          ▼
-       GitHub Releases API        editable field
+Android: Compose → repository → Room → accessibility trigger index → editable field
+Desktop: Tauri editor → Rust library → local JSON → keyboard trigger index → editable field
+                         │
+                         ├─ explicit backup import/export (compatible JSON/text)
+                         ├─ optional Google Drive appData sync (one file per device)
+                         └─ GitHub Releases check → confirmed installer handoff
 ```
+
+The two apps share formats, not runtime code. Android storage and system permissions differ from desktop, so a shared implementation layer would couple decisions that can change independently. On either platform the input agent reads the local library; network work does not belong on the typing path.
 
 ## Text expansion
 
-`TextExpansionService` observes editable text through Android accessibility events. When an enabled trigger appears immediately before the cursor and the user enters a delimiter, the service:
+`TextExpansionService` observes editable text through Android accessibility events. It builds a lookup index when the enabled snippet list changes, so a space typed into another app does not scan the whole library. When a trigger appears immediately before the cursor and the user enters a delimiter, the service:
 
 1. Identifies the trigger range relative to the current selection.
 2. Replaces only that range.
@@ -57,6 +57,8 @@ Each snippet has one primary trigger and zero or more aliases:
 A complete restore validates the input and then replaces the library in one Room transaction. Fresh local IDs are assigned during import.
 
 Desktop keeps a separate local JSON file under the OS application-data directory. Saves write a temporary file in the same directory and rename it over the old copy. The file uses the Android backup envelope with `format=snippetdeck-backup` and `schemaVersion=2`, so export and import are reversible across platforms. Sync has its own versioned format and local metadata file; backup imports still replace the full library after confirmation. Avoid pointing two live desktop installations at the same working file.
+
+Libraries allow up to 10,000 snippets and 2 MB of backup JSON. Saves serialize the full desktop library, while the typing index is rebuilt only after an edit. Google Drive sync lists at most 50 device files and transfers their bounded replicas when the app opens, saves, or the user requests sync. This is a deliberate whole-library exchange at the project's current limits; if those limits change, measure network transfer and merge cost before adding caching or a server.
 
 ## Compose UI
 
@@ -128,3 +130,5 @@ The following identifiers are retained so updates preserve installed state:
 - Current and documented legacy backup formats.
 
 Changing one of these requires an explicit migration and upgrade test. Historical identifiers are compatibility details, not current product branding.
+
+[← Project overview](../README.md) · [Guide](GUIDE.md) · [Development](../CONTRIBUTING.md) · [Operations](OPERATIONS.md)
