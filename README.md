@@ -59,6 +59,8 @@ Create a snippet  →  type !today + Space  →  SnippetDeck inserts the expansi
 
 ## Install
 
+The [SnippetDeck website](https://krablante.github.io/snippet-deck/) introduces the app and hosts its [privacy policy](https://krablante.github.io/snippet-deck/privacy.html). Installers are published on GitHub Releases.
+
 ### Android
 
 SnippetDeck requires Android 13 or newer.

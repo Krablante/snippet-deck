@@ -1,0 +1,44 @@
+<!doctype html>
+<!-- Public rendering of ../PRIVACY.md. Update both when the data flow changes. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="How SnippetDeck handles local snippets, optional Google Drive sync, updates and backups.">
+  <title>Privacy policy — SnippetDeck</title>
+  <link rel="canonical" href="https://krablante.github.io/snippet-deck/privacy.html">
+  <link rel="stylesheet" href="./site.css">
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <a class="brand" href="./">SnippetDeck</a>
+      <nav aria-label="Main navigation">
+        <a href="./">Home</a>
+        <a href="https://github.com/Krablante/snippet-deck/releases/latest">Download</a>
+        <a href="https://github.com/Krablante/snippet-deck">Source code</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap document">
+    <h1>SnippetDeck privacy</h1>
+    <p>SnippetDeck expands text you type into editable fields. The Android accessibility service and desktop keyboard agent observe enough input to recognize triggers. They do not store or upload the text you type in other apps. Snippets you create are stored locally on your device.</p>
+
+    <h2>Optional Google Drive sync</h2>
+    <p>If you choose <strong>Connect Google Drive</strong>, SnippetDeck requests the <code>drive.appdata</code> permission. It can read and write only its own app-data folder in your Google Drive, not your other Drive files. To sync devices, it sends your snippets, aliases, expansions, enabled states, timestamps, deletion records, and random device identifiers to that folder. The files count against your Google Drive storage. Google processes and stores this data under your Google account; <strong>SnippetDeck does not end-to-end encrypt it</strong>. The SnippetDeck maintainer has no server that receives the library or your Google tokens.</p>
+    <p>On Android, Google Play services handles authorization. On desktop, the app opens the system browser for Google sign-in and stores a refresh token in the operating system's credential store when available. If no persistent credential store is available, authorization lasts only for the current app session. Tokens are never included in exported backups. Disconnecting stops future sync on that device and keeps its local snippets; it does not remove files already in Google Drive. You can revoke access in your <a href="https://myaccount.google.com/connections">Google Account's connected apps</a> and delete the app's hidden data through Google Drive's app management controls.</p>
+
+    <h2>Other data flows</h2>
+    <p>On Android, SnippetDeck contacts GitHub to check public release metadata and downloads an APK only with your approval. No snippet content is included in update requests. Manual file and clipboard backups contain your snippets and go only where you choose to save or paste them. Desktop multiline insertion temporarily uses the system clipboard; local clipboard managers may retain that text.</p>
+    <p>There is no analytics, advertising, SnippetDeck account, or SnippetDeck backend. For questions or privacy requests, open a <a href="https://github.com/Krablante/snippet-deck/issues">GitHub issue</a>.</p>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p>SnippetDeck is open source under the MIT License.</p>
+      <a href="./">Home</a>
+    </div>
+  </footer>
+</body>
+</html>
