@@ -38,6 +38,10 @@ jobs:
           java-version: 17
           cache: gradle
 
+      - name: Install Android 37 SDK
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --channel=3 'platforms;android-37.0'
+
       - name: Verify and build debug APK
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug --stacktrace --no-daemon --max-workers=2
 

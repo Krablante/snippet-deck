@@ -6,7 +6,7 @@ The repository has two applications with a shared user-facing backup and sync fo
 
 ## Android
 
-Install JDK 17 and Android SDK 36. Set your SDK path in an ignored `local.properties` (see `local.properties.example`) or open the project in Android Studio. An Android 13+ device or emulator is needed for interactive testing.
+Install JDK 17 and Android SDK Platform 37.0 (`sdkmanager --channel=3 'platforms;android-37.0'`). The app still targets Android 36. Set your SDK path in an ignored `local.properties` (see `local.properties.example`) or open the project in Android Studio. An Android 13+ device or emulator is needed for interactive testing.
 
 ```bash
 ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --max-workers=2

@@ -9,14 +9,14 @@ plugins {
 
 android {
     namespace = "com.rrajath.expander"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.rrajath.expander"
         minSdk = 33
         targetSdk = 36
-        versionCode = 10803
-        versionName = "1.8.3"
+        versionCode = 10804
+        versionName = "1.8.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -91,6 +91,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.haze)
+    implementation(libs.haze.glass)
 
     // Room
     implementation(libs.androidx.room.runtime)

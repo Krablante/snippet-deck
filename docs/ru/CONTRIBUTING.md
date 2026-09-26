@@ -6,7 +6,7 @@
 
 ## Android
 
-Установите JDK 17 и Android SDK 36. Укажите путь к SDK в игнорируемом `local.properties` (пример — `local.properties.example`) или откройте проект в Android Studio. Для ручной проверки нужен Android 13+ или эмулятор.
+Установите JDK 17 и Android SDK Platform 37.0 (`sdkmanager --channel=3 'platforms;android-37.0'`). Целевая версия приложения остаётся Android 36. Укажите путь к SDK в игнорируемом `local.properties` (пример — `local.properties.example`) или откройте проект в Android Studio. Для ручной проверки нужен Android 13+ или эмулятор.
 
 ```bash
 ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --max-workers=2

@@ -4,10 +4,12 @@ import android.content.Intent
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
@@ -17,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -26,11 +29,11 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.rrajath.expander.data.Snippet
 import com.rrajath.expander.service.TextExpansionService
 import com.rrajath.expander.ui.components.SearchBar
-import com.rrajath.expander.ui.components.glassControl
+import com.rrajath.expander.ui.components.GlassBlock
 import com.rrajath.expander.sync.SyncUiState
 import com.rrajath.expander.util.ThemePreferences
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.haze
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 
 @Composable
 internal fun SnippetListScreen(
@@ -70,12 +73,12 @@ internal fun SnippetListScreen(
     val colors = MaterialTheme.colorScheme
     val reduceTransparency by ThemePreferences.reduceTransparency.collectAsState()
     val opaqueControls = reduceTransparency || highContrast || powerSave
-    val hazeState = remember { HazeState() }
+    val hazeState = rememberHazeState()
 
     Box(modifier = modifier.fillMaxSize().background(colors.background).statusBarsPadding().navigationBarsPadding()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(top = 8.dp)
-                .then(if (opaqueControls) Modifier else Modifier.haze(state = hazeState)),
+                .then(if (opaqueControls) Modifier else Modifier.hazeSource(state = hazeState)),
             contentPadding = PaddingValues(top = 58.dp, bottom = 94.dp),
         ) {
             if (!accessibilityEnabled || !serviceEnabled) {
@@ -85,12 +88,12 @@ internal fun SnippetListScreen(
                             .padding(start = 18.dp, end = 10.dp, top = 9.dp, bottom = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(if (accessibilityEnabled) "Text expansion is paused" else "Text expansion is off", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        Text(if (accessibilityEnabled) "Text expansion is paused" else "Text expansion is off", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = colors.onErrorContainer)
                         TextButton(onClick = {
                             if (accessibilityEnabled) onSettingsClick()
                             else context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                         }) {
-                            Text("Enable")
+                            Text("Enable", color = colors.onErrorContainer)
                         }
                     }
                 }
@@ -124,50 +127,51 @@ internal fun SnippetListScreen(
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
-                .height(52.dp).glassControl(
-                    hazeState,
-                    opaqueControls,
-                    androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
-                    tintAlpha = 0.72f,
-                ).padding(start = 12.dp, end = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        GlassBlock(
+            hazeState = hazeState,
+            opaque = opaqueControls,
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).height(52.dp),
         ) {
-            Text(
-                "SnippetDeck",
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.titleLarge,
-                color = colors.onBackground,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            val label = when {
-                syncState is SyncUiState.Conflict -> "Resolve"
-                syncState is SyncUiState.Failed -> "Retry"
-                syncState is SyncUiState.Working -> "Syncing"
-                !syncConnected -> "Connect"
-                syncState is SyncUiState.Synced -> "Synced"
-                else -> "Sync"
-            }
-            TextButton(
-                onClick = { if (syncState is SyncUiState.Conflict) onSettingsClick() else onSyncClick() },
-                enabled = syncState !is SyncUiState.Working,
-                modifier = Modifier.height(48.dp).widthIn(min = 64.dp),
-                contentPadding = PaddingValues(horizontal = 6.dp),
+            Row(
+                modifier = Modifier.fillMaxSize().padding(start = 12.dp, end = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (syncState is SyncUiState.Working) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Text(
-                        label,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (syncState is SyncUiState.Failed || syncState is SyncUiState.Conflict) colors.error else colors.onSurface,
-                    )
+                Text(
+                    "SnippetDeck",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = colors.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                val label = when {
+                    syncState is SyncUiState.Conflict -> "Resolve"
+                    syncState is SyncUiState.Failed -> "Retry"
+                    syncState is SyncUiState.Working -> "Syncing"
+                    !syncConnected -> "Connect"
+                    syncState is SyncUiState.Synced -> "Synced"
+                    else -> "Sync"
                 }
-            }
-            IconButton(onClick = onSettingsClick) {
-                Icon(Icons.Default.Settings, contentDescription = "Settings", tint = colors.onBackground)
+                TextButton(
+                    onClick = { if (syncState is SyncUiState.Conflict) onSettingsClick() else onSyncClick() },
+                    enabled = syncState !is SyncUiState.Working,
+                    modifier = Modifier.height(48.dp).widthIn(min = 64.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp),
+                ) {
+                    if (syncState is SyncUiState.Working) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (syncState is SyncUiState.Failed || syncState is SyncUiState.Conflict) colors.error else colors.onSurface,
+                        )
+                    }
+                }
+                IconButton(onClick = onSettingsClick) {
+                    Icon(Icons.Default.Settings, contentDescription = "Settings", tint = colors.onBackground)
+                }
             }
         }
 
@@ -184,15 +188,19 @@ internal fun SnippetListScreen(
                 opaque = opaqueControls,
                 modifier = Modifier.weight(1f),
             )
-            FloatingActionButton(
-                onClick = onAddClick,
-                modifier = Modifier.size(52.dp),
-                containerColor = colors.primary,
-                contentColor = colors.onPrimary,
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
-                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 2.dp, pressedElevation = 4.dp),
+            GlassBlock(
+                hazeState = hazeState,
+                opaque = opaqueControls,
+                shape = RoundedCornerShape(20.dp),
+                accent = true,
+                modifier = Modifier.size(52.dp).clickable(role = Role.Button, onClick = onAddClick),
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Add snippet")
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "Add snippet",
+                    tint = if (opaqueControls) colors.onPrimary else colors.onSurface,
+                    modifier = Modifier.align(Alignment.Center),
+                )
             }
         }
     }
