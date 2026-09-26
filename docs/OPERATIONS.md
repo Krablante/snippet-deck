@@ -56,7 +56,7 @@ Never commit a keystore or signing credentials. A build signed with a different 
 
 ## Official GitHub release
 
-The `Release SnippetDeck` workflow is started manually from `main` with a semantic tag such as `v1.6.0`. It:
+The `Release SnippetDeck` workflow is started manually from `main` with a semantic tag such as `v1.7.0`. The optional `preview` input publishes the same signed builds as a prerelease for device testing; Android's latest-release updater keeps pointing to the prior stable APK until the prerelease is promoted. It:
 
 1. Checks out the selected revision.
 2. Restores the release keystore from encrypted GitHub Actions secrets.
@@ -64,6 +64,8 @@ The `Release SnippetDeck` workflow is started manually from `main` with a semant
 4. Verifies application ID, version name, APK signature validity, and the pinned release certificate.
 5. Builds the Windows, macOS (Apple Silicon and Intel), and Linux X11 installers from the same commit.
 6. Uploads the five assets and a checksum list to a draft release, checks the APK digest and asset count, then publishes it as the latest stable release.
+
+For a preview, the final step publishes a prerelease instead. After testing the signed APK and the desktop installers, edit that release to clear **prerelease** and mark it **latest**. Do not replace assets after verification without repeating integrity checks.
 
 Before starting the workflow:
 
@@ -105,7 +107,13 @@ To recover:
 3. Import the latest file or text backup.
 4. Confirm the restored count and test both an enabled and disabled snippet.
 
-On desktop, select **More options → Export backup…** to create Android-compatible JSON. **Import backup…** accepts that file or a compact text backup, previews the count, and replaces the whole library after confirmation. Export from each device before importing when both libraries have changed independently. A folder synchronized by Google Drive can carry exported files, but does not turn them into automatic two-way sync. The working library file belongs in local app data, never in a folder shared between live installations.
+On desktop, select **More options → Export backup…** to create Android-compatible JSON. **Import backup…** accepts that file or a compact text backup, previews the count, and replaces the whole library after confirmation. Export from each device before importing when both libraries have changed independently. Manual transfer of backup files remains separate from the in-app sync feature. The working library file belongs in local app data, never in a folder shared between live installations.
+
+## Google Drive sync setup and recovery
+
+The public app uses separate Android and desktop OAuth client IDs within the same Google Cloud project. Enable Drive API and request only `drive.appdata`. Register the Android release package and pinned signing certificate; a debug build with its different package/signature needs a separate Android OAuth client to exercise sign-in. Do not put a desktop client secret, access token, refresh token, or downloaded OAuth JSON in the repository. The public [privacy policy](../PRIVACY.md) describes the opt-in data flow. An External OAuth app left in **Testing** expires user authorizations after seven days; publish the consent screen for everyday use. Standard Drive API use fits the free tier, but keep paid billing and quota increases disabled if costs are unacceptable.
+
+To connect, use the Android Settings card or the desktop library's Google Drive row and select the same account. Snippets stay local when offline. Sync runs on app open or local edits, or when requested manually, without continuous polling. If a conflict appears, export backups from both devices before selecting the library to keep. Only one other device can be selected with **Use other device**; with several devices, make the choice on the device whose data you want to keep. Disconnect stops sync on that installation; it does not delete its local snippets or the cloud data. Reconnecting to a different Google account requires a deliberate reset of local sync history, not a silent upload to the new account.
 
 ## Upstream changes
 

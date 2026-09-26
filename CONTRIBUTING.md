@@ -29,7 +29,7 @@ Debug builds use the `.debug` application ID suffix and can be installed alongsi
 - Treat the application ID, package namespace, Room database name, preferences filenames, and release signing identity as compatibility contracts.
 - Add explicit Room migrations for schema changes and tests for every supported upgrade path.
 - Preserve current and legacy backup compatibility unless a documented migration path is provided.
-- Keep update networking limited to the public GitHub latest-release request and an explicitly approved APK download. Do not add embedded tokens, background polling, silent installation, or snippet-data transmission.
+- Keep GitHub update checks separate from optional Google Drive sync. Never embed access or refresh tokens, request access to all Drive files, add a server backend, or poll in the background. A cloud edit must not overwrite concurrent local work silently.
 - Preserve the exact release asset name, semantic version, increasing version code, package ID, SHA-256 verification, and pinned signing identity required by installed updates.
 - Keep White, Black, and Sepia deterministic; do not re-enable wallpaper-derived dynamic colors. New UI must remain legible in all three palettes and preserve migration of legacy Light/Dark/System values.
 - Do not commit SDK paths, keystores, credentials, APKs, exported backups, device data, or local agent/editor state.

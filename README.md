@@ -53,7 +53,7 @@ Create a snippet  →  type !today + Space  →  SnippetDeck inserts the expansi
 - Date and time placeholders such as `{{date}}`, `{{time}}`, `{{year_short}}`, and `{{week_num}}`.
 - A compact, searchable snippet library with enabled state and White, Black, or Sepia themes.
 - Portable JSON files and compact text backups for moving a library between devices.
-- Fully local snippet storage with no account, backend, analytics, advertising, or data sync.
+- Local snippet storage with optional sync through your own Google Drive account; no SnippetDeck server, analytics, or advertising.
 - Quiet GitHub release checks and verified in-app APK updates.
 - A desktop editor and background text expansion for Windows, macOS, and Linux X11.
 
@@ -118,20 +118,28 @@ On Android, open **Settings → Backup & transfer**:
 
 Both formats preserve triggers, aliases, expansions, enabled state, and timestamps. Import is transactional and replaces the complete library so deletions transfer correctly. Legacy raw-array, v1.0 JSON, and text V1 backups remain importable.
 
-On desktop, open **More options → Export backup…** to save the same JSON format, or **Import backup…** to read Android JSON and compact text backups. Import shows the snippet count and replaces the complete local library only after confirmation. The desktop app stores its working copy in the operating system's application-data directory. You can put an exported file in Google Drive and import it on another device; **this is manual transfer, not automatic sync**. If both devices changed, export both libraries before replacing either one and reconcile the changes yourself.
+On desktop, open **More options → Export backup…** to save the same JSON format, or **Import backup…** to read Android JSON and compact text backups. Import shows the snippet count and replaces the complete local library only after confirmation. The desktop app stores its working copy in the operating system's application-data directory. Backup files remain useful for recovery even when cloud sync is enabled.
 
 > [!CAUTION]
 > Backups may contain sensitive text. Store and share them accordingly.
+
+## Google Drive sync
+
+Sync is optional. On Android, open **Settings → Google Drive sync → Connect Google Drive**. On desktop, click **Connect** in the library. Use the same Google account on each device. SnippetDeck requests access only to its own hidden app-data folder in Drive; it cannot read your other Drive files. No separate SnippetDeck account or server is needed.
+
+Each device keeps its working library locally. SnippetDeck syncs when you open the app and after you save changes, or when you tap **Sync now**. It does not poll in the background while closed. You can edit offline; the next sync sends those changes. Independent edits merge, including deletions. If the same trigger was changed on two devices before they exchanged changes, neither edit is silently overwritten: choose **Use this device's library** or **Use other device's library** after reviewing or exporting backups. The latter option applies when there is one other connected device.
+
+Sync and backups are separate. Disconnecting stops sync on that device and preserves its local library and history; it does not erase the existing data in your Google Drive. Your snippet content is not end-to-end encrypted: Google can access the files stored in your Drive. See the [privacy policy](PRIVACY.md).
 
 ## Privacy and security
 
 On Android, SnippetDeck uses the accessibility API to detect triggers and replace text in editable fields. The desktop agent keeps only a short in-memory buffer of recently typed characters to detect a trigger. Observed field content is not stored or transmitted.
 
 - On Android, snippets and settings stay in the local Room database. Desktop keeps its library and settings in local app data.
-- On Android, snippet content leaves the app only when you explicitly export or copy a backup. On desktop, multiline expansions briefly use the system clipboard and attempt to restore its previous content. Clipboard managers may retain copied text; avoid storing secrets in multiline snippets.
-- Android networking is limited to GitHub release metadata and an APK download you explicitly approve. Snippets, observed text, settings, and backups are never included in those requests.
-- The desktop app makes no network requests; its backups and library stay local until you choose where to save a file.
-- There is no account system, analytics, advertising, remote-control component, background updater, or data-sync service.
+- When you connect Google Drive, both platforms send snippets, deletions, and sync metadata to the app's folder in your account. Without that choice, snippet content stays local except when you explicitly export or copy it.
+- Android checks GitHub for release metadata and downloads an APK only after approval. Neither platform sends observed typing to Google or GitHub.
+- Desktop multiline expansion briefly uses the system clipboard and attempts to restore its previous content. Clipboard managers may retain copied text; avoid storing secrets in multiline snippets.
+- There is no SnippetDeck account system, server, analytics, advertising, remote control, or background polling.
 - Official updates must keep the same Android signing identity so they can be installed over an existing version without clearing local data.
 
 ## Build from source
@@ -159,7 +167,8 @@ See [Contributing](CONTRIBUTING.md) for development expectations and [Operations
 ```text
 Android: Compose editor ──► Room ──► AccessibilityService ──► editable field
 Desktop: editor (on demand) ──► local JSON ──► Rust keyboard adapter ──► editable field
-         Both libraries exchange compatible backup files by explicit import/export.
+         Optional Google Drive sync exchanges versions between the two local libraries.
+         Portable backups remain available by explicit import/export.
 ```
 
 See [Architecture](docs/ARCHITECTURE.md) for component boundaries, data formats, and compatibility contracts.

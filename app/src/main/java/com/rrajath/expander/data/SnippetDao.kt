@@ -46,4 +46,10 @@ interface SnippetDao {
         deleteAll()
         insertAll(snippets.map { it.copy(id = 0) })
     }
+
+    @Transaction
+    suspend fun replaceIfUnchanged(expected: List<Snippet>, snippets: List<Snippet>) {
+        check(getAllSnippetsOnce() == expected) { "Library changed while syncing; retry" }
+        replaceAll(snippets)
+    }
 }

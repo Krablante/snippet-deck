@@ -8,7 +8,7 @@ const MAX_BYTES: usize = 2_000_000;
 const MAX_SNIPPETS: usize = 10_000;
 const FORMAT: &str = "snippetdeck-backup";
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snippet {
     pub trigger: String,

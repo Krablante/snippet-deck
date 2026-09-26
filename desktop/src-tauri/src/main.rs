@@ -1,16 +1,23 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod expansion;
+mod google;
 mod library;
+mod sync;
 
 use expansion::Expander;
 use library::{Library, Snippet};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::{
     fs,
     path::PathBuf,
-    sync::{atomic::Ordering, Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
 };
+use sync::{same_library, LocalState};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
@@ -23,15 +30,40 @@ struct AppState {
     import: Mutex<Option<Library>>,
     path: PathBuf,
     active_path: PathBuf,
+    sync_path: PathBuf,
+    sync_disabled_path: PathBuf,
+    sync_lock: Mutex<()>,
+    sync_active: AtomicBool,
+    access: Mutex<Option<google::Access>>,
     expander: Arc<Expander>,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct Snapshot {
     snippets: Vec<Snippet>,
     active: bool,
     start_at_login: bool,
     status: String,
+    sync_connected: bool,
+    sync_history: bool,
+}
+
+#[cfg(test)]
+#[test]
+fn snapshot_uses_the_field_names_read_by_the_editor() {
+    let snapshot = Snapshot {
+        snippets: Vec::new(),
+        active: true,
+        start_at_login: true,
+        status: String::new(),
+        sync_connected: true,
+        sync_history: true,
+    };
+    let value = serde_json::to_value(snapshot).unwrap();
+    assert_eq!(value["startAtLogin"], true);
+    assert_eq!(value["syncConnected"], true);
+    assert_eq!(value["syncHistory"], true);
 }
 
 #[tauri::command]
@@ -41,6 +73,8 @@ fn snapshot(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Snapsho
         active: state.expander.enabled.load(Ordering::Relaxed),
         start_at_login: app.autolaunch().is_enabled().unwrap_or(false),
         status: state.expander.status.read().unwrap().clone(),
+        sync_connected: state.sync_active.load(Ordering::Relaxed),
+        sync_history: state.sync_path.exists(),
     }
 }
 
@@ -131,6 +165,196 @@ fn finish_import(state: tauri::State<'_, AppState>) -> Result<(), String> {
         *current = library;
         Ok(())
     })
+}
+
+#[derive(Serialize)]
+struct SyncResult {
+    count: usize,
+    conflicts: Vec<String>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SyncChoice {
+    Merge,
+    ThisDevice,
+    OtherDevice,
+}
+
+fn sync_internal(
+    app: &tauri::AppHandle,
+    interactive: bool,
+    choice: SyncChoice,
+) -> Result<SyncResult, String> {
+    let state = app.state::<AppState>();
+    let _guard = state.sync_lock.lock().unwrap();
+    let token = {
+        let mut access = state.access.lock().unwrap();
+        if access
+            .as_ref()
+            .is_none_or(|a| a.expires <= std::time::Instant::now())
+        {
+            let saved = access
+                .as_ref()
+                .map(|a| a.refresh.clone())
+                .or_else(google::saved_refresh);
+            let new_access = match saved {
+                Some(refresh) => google::refresh(&refresh).or_else(|e| {
+                    if interactive {
+                        google::authorize()
+                    } else {
+                        Err(e)
+                    }
+                })?,
+                None if interactive => google::authorize()?,
+                None => return Err("Connect Google Drive first".into()),
+            };
+            if let Ok(entry) = google::credential() {
+                let _ = entry.set_password(&new_access.refresh);
+            }
+            *access = Some(new_access);
+        }
+        let access = access.as_ref().ok_or("Google Drive is not connected")?;
+        access.token.clone()
+    };
+    let drive = google::Drive::new(token);
+    let account = drive.account_id()?;
+    let old_state = LocalState::load(&state.sync_path)?;
+    if old_state.as_ref().is_some_and(|s| s.account_id != account) {
+        return Err("This device was connected to a different Google account".into());
+    }
+    let library = state.library.lock().unwrap().clone();
+    let mut local = old_state
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| LocalState::fresh(account));
+    if choice == SyncChoice::Merge {
+        local.collect_changes(&library)?;
+    }
+    let files = drive.list()?;
+    let name = format!("snippetdeck-sync-v1-{}.json", local.replica.device_id);
+    let own: Vec<_> = files.iter().filter(|file| file.name == name).collect();
+    if own.len() > 1 {
+        return Err("Duplicate device files in Google Drive".into());
+    }
+    let others: Vec<_> = files
+        .iter()
+        .filter(|file| file.name != name)
+        .map(|file| drive.read(file))
+        .collect::<Result<_, _>>()?;
+    let merge = local.replica.merge(&others, choice == SyncChoice::Merge)?;
+    if choice == SyncChoice::ThisDevice {
+        local.replica = merge.replica;
+        local.keep_local(&library);
+    } else if choice == SyncChoice::OtherDevice {
+        if others.len() != 1 {
+            return Err(
+                "Use the preferred device to resolve a conflict across multiple devices".into(),
+            );
+        }
+        let chosen = others[0]
+            .clone()
+            .merge(&[], true)?
+            .library
+            .ok_or("The other device has unresolved conflicts")?;
+        if !same_library(&library, &chosen) {
+            save_change(&state, |current| {
+                if !same_library(current, &library) {
+                    return Err("Library changed while syncing; retry".into());
+                }
+                *current = chosen.clone();
+                Ok(())
+            })?;
+        }
+        local.replica = merge.replica;
+        local.keep_local(&chosen);
+    } else {
+        if let Some(remote) = &merge.library {
+            if !same_library(&library, remote) {
+                save_change(&state, |current| {
+                    if !same_library(current, &library) {
+                        return Err("Library changed while syncing; retry".into());
+                    }
+                    *current = remote.clone();
+                    Ok(())
+                })?;
+            }
+            local.baseline = remote.snippets.clone();
+        } else {
+            local.baseline = library.snippets.clone();
+        }
+        local.replica = merge.replica;
+    }
+    local.file_id = own.first().map(|file| file.id.clone());
+    if old_state.as_ref() != Some(&local) {
+        local.save(&state.sync_path)?;
+    }
+    if choice != SyncChoice::Merge || merge.conflicts.is_empty() {
+        let hash = Sha256::digest(serde_json::to_vec(&local.replica).map_err(|e| e.to_string())?);
+        let hash: String = hash.iter().map(|byte| format!("{byte:02x}")).collect();
+        if local.file_id.is_none() || local.last_uploaded_hash.as_ref() != Some(&hash) {
+            local.file_id = Some(drive.write(&local.replica, local.file_id.as_deref())?);
+            local.last_uploaded_hash = Some(hash);
+            local.save(&state.sync_path)?;
+        }
+    }
+    if state.sync_disabled_path.exists() {
+        fs::remove_file(&state.sync_disabled_path)
+            .map_err(|e| format!("Cannot enable sync: {e}"))?;
+    }
+    state.sync_active.store(true, Ordering::Relaxed);
+    Ok(SyncResult {
+        count: local.baseline.len(),
+        conflicts: if choice != SyncChoice::Merge {
+            Vec::new()
+        } else {
+            merge.conflicts
+        },
+    })
+}
+
+#[tauri::command]
+async fn sync_now(
+    app: tauri::AppHandle,
+    interactive: bool,
+    keep_local: bool,
+    use_other: bool,
+) -> Result<SyncResult, String> {
+    if keep_local && use_other {
+        return Err("Choose one library to keep".into());
+    }
+    let choice = if keep_local {
+        SyncChoice::ThisDevice
+    } else if use_other {
+        SyncChoice::OtherDevice
+    } else {
+        SyncChoice::Merge
+    };
+    tauri::async_runtime::spawn_blocking(move || sync_internal(&app, interactive, choice))
+        .await
+        .map_err(|e| format!("Cannot finish sync: {e}"))?
+}
+
+#[tauri::command]
+fn disconnect_sync(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let _guard = state.sync_lock.lock().unwrap();
+    state.access.lock().unwrap().take();
+    google::forget_refresh();
+    fs::write(&state.sync_disabled_path, "off").map_err(|e| format!("Cannot disable sync: {e}"))?;
+    state.sync_active.store(false, Ordering::Relaxed);
+    Ok(())
+}
+
+#[tauri::command]
+fn reset_sync(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let _guard = state.sync_lock.lock().unwrap();
+    fs::write(&state.sync_disabled_path, "off").map_err(|e| e.to_string())?;
+    if state.sync_path.exists() {
+        fs::remove_file(&state.sync_path).map_err(|e| format!("Cannot reset sync history: {e}"))?;
+    }
+    state.access.lock().unwrap().take();
+    google::forget_refresh();
+    state.sync_active.store(false, Ordering::Relaxed);
+    Ok(())
 }
 
 #[tauri::command]
@@ -264,11 +488,16 @@ fn main() {
             set_start_at_login,
             choose_import,
             finish_import,
-            export_file
+            export_file,
+            sync_now,
+            disconnect_sync,
+            reset_sync
         ])
         .setup(|app| {
             let path = app.path().app_data_dir()?.join("library.json");
             let active_path = path.with_file_name("enabled");
+            let sync_path = path.with_file_name("sync.json");
+            let sync_disabled_path = path.with_file_name("sync-disabled");
             let library = Library::load(&path).map_err(std::io::Error::other)?;
             let expander = Arc::new(Expander::new(library.snippets.clone()));
             if fs::read_to_string(&active_path).is_ok_and(|value| value == "off") {
@@ -279,6 +508,11 @@ fn main() {
                 import: Mutex::new(None),
                 path,
                 active_path,
+                sync_active: AtomicBool::new(sync_path.exists() && !sync_disabled_path.exists()),
+                sync_path,
+                sync_disabled_path,
+                sync_lock: Mutex::new(()),
+                access: Mutex::new(None),
                 expander: expander.clone(),
             });
             expander.start();

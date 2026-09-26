@@ -2,8 +2,11 @@ package com.rrajath.expander.ui.navigation
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.app.Activity
 import android.net.Uri
+import android.os.SystemClock
 import android.widget.Toast
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.AlertDialog
@@ -15,12 +18,20 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.rrajath.expander.ui.SnippetViewModel
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.Scope
+import com.rrajath.expander.sync.SyncUiState
+import com.rrajath.expander.sync.SyncViewModel
 import com.rrajath.expander.ui.screens.AddEditSnippetScreen
 import com.rrajath.expander.ui.screens.SettingsScreen
 import com.rrajath.expander.ui.screens.SnippetListScreen
@@ -59,7 +70,8 @@ internal fun NavGraph(
     initialExpansion: String? = null,
     updateState: UpdateUiState,
     onCheckForUpdates: () -> Unit,
-    viewModel: SnippetViewModel = viewModel()
+    viewModel: SnippetViewModel = viewModel(),
+    syncViewModel: SyncViewModel = viewModel(),
 ) {
     // Navigate to Add Snippet when launched via ACTION_PROCESS_TEXT.
     // MainActivity gets a fresh instance per PROCESS_TEXT launch, so firing
@@ -72,6 +84,62 @@ internal fun NavGraph(
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val syncState by syncViewModel.state.collectAsState()
+    val authorizationClient = remember(context) { Identity.getAuthorizationClient(context) }
+    var syncChoice by remember { mutableStateOf(SyncViewModel.SyncChoice.MERGE) }
+    val authorizeLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) {
+            syncViewModel.fail("Google Drive access was cancelled")
+        } else {
+            runCatching { authorizationClient.getAuthorizationResultFromIntent(result.data) }
+                .onSuccess { authorization ->
+                    val token = authorization.accessToken
+                    if (token == null) syncViewModel.fail("Google Drive did not grant access")
+                    else syncViewModel.syncWith(token, syncChoice)
+                }
+                .onFailure { syncViewModel.fail(it.message ?: "Google Drive authorization failed") }
+        }
+    }
+
+    fun syncWithGoogle(choice: SyncViewModel.SyncChoice = SyncViewModel.SyncChoice.MERGE) {
+        syncChoice = choice
+        val request = AuthorizationRequest.builder()
+            .setRequestedScopes(listOf(Scope("https://www.googleapis.com/auth/drive.appdata")))
+            .build()
+        authorizationClient.authorize(request)
+            .addOnSuccessListener { authorization ->
+                if (authorization.hasResolution()) {
+                    val pending = authorization.pendingIntent
+                    if (pending == null) syncViewModel.fail("Google Drive authorization is unavailable")
+                    else authorizeLauncher.launch(IntentSenderRequest.Builder(pending.intentSender).build())
+                } else {
+                    val token = authorization.accessToken
+                    if (token == null) syncViewModel.fail("Google Drive did not grant access")
+                    else syncViewModel.syncWith(token, choice)
+                }
+            }
+            .addOnFailureListener { syncViewModel.fail(it.message ?: "Google Drive authorization failed") }
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var lastPull by remember { mutableLongStateOf(0L) }
+    DisposableEffect(lifecycleOwner, initialExpansion) {
+        fun onForeground() {
+            val now = SystemClock.elapsedRealtime()
+            if (initialExpansion == null && syncViewModel.connected() && now - lastPull > 60_000) {
+                lastPull = now
+                syncWithGoogle()
+            }
+        }
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) onForeground()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) onForeground()
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val snippets by viewModel.snippets.collectAsState()
     val allSnippets by viewModel.allSnippets.collectAsState()
@@ -130,6 +198,7 @@ internal fun NavGraph(
                                 "Restored ${importData.snippets.size} snippets",
                                 Toast.LENGTH_SHORT
                             ).show()
+                            if (syncViewModel.connected()) syncWithGoogle()
                         }
                         pendingImport = null
                     },
@@ -160,8 +229,16 @@ internal fun NavGraph(
                 onSnippetClick = { snippetId ->
                     navController.navigate(Screen.EditSnippet.createRoute(snippetId))
                 },
-                onSnippetDelete = viewModel::deleteSnippet,
-                onSnippetToggle = viewModel::toggleSnippetEnabled,
+                onSnippetDelete = { snippet ->
+                    viewModel.deleteSnippet(snippet) {
+                        if (syncViewModel.connected()) syncWithGoogle()
+                    }
+                },
+                onSnippetToggle = { snippet ->
+                    viewModel.toggleSnippetEnabled(snippet) {
+                        if (syncViewModel.connected()) syncWithGoogle()
+                    }
+                },
                 onAddClick = {
                     navController.navigate(Screen.AddSnippet.createRoute())
                 },
@@ -192,6 +269,7 @@ internal fun NavGraph(
                 onSave = { trigger, expansion, aliases ->
                     viewModel.insertSnippet(trigger, expansion, aliases) {
                         navController.popBackStack()
+                        if (syncViewModel.connected()) syncWithGoogle()
                     }
                 },
                 onNavigateBack = {
@@ -232,6 +310,7 @@ internal fun NavGraph(
                         )
                         viewModel.updateSnippet(updatedSnippet) {
                             navController.popBackStack()
+                            if (syncViewModel.connected()) syncWithGoogle()
                         }
                     },
                     onNavigateBack = {
@@ -244,6 +323,15 @@ internal fun NavGraph(
         composable(Screen.Settings.route) {
             SettingsScreen(
                 updateState = updateState,
+                syncState = syncState,
+                syncConnected = syncViewModel.connected(),
+                syncHasHistory = syncViewModel.hasHistory(),
+                snippetCount = allSnippets.size,
+                onSync = { syncWithGoogle() },
+                onDisconnectSync = syncViewModel::disconnect,
+                onResetSync = syncViewModel::reset,
+                onReplaceCloud = { syncWithGoogle(SyncViewModel.SyncChoice.THIS_DEVICE) },
+                onUseOtherDevice = { syncWithGoogle(SyncViewModel.SyncChoice.OTHER_DEVICE) },
                 onCheckForUpdates = onCheckForUpdates,
                 onNavigateBack = {
                     navController.popBackStack()

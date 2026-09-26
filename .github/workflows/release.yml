@@ -4,9 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag, for example v1.6.0
+        description: Release tag, for example v1.7.0
         required: true
         type: string
+      preview:
+        description: Publish as a prerelease for device testing
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   validate:
@@ -77,7 +82,7 @@ jobs:
           test -f "$APK"
           test "$(bash "$APKANALYZER" manifest application-id "$APK")" = "com.rrajath.expander"
           test "$(bash "$APKANALYZER" manifest version-name "$APK")" = "$EXPECTED_VERSION"
-          test "$(bash "$APKANALYZER" manifest version-code "$APK")" = "10600"
+          test "$(bash "$APKANALYZER" manifest version-code "$APK")" = "10700"
           "$APKSIGNER" verify --verbose "$APK"
 
           ACTUAL_SIGNER_SHA256=$("$APKSIGNER" verify --print-certs "$APK" 2>&1 | grep -oE '[[:xdigit:]]{64}' | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -d '\r\n')
@@ -158,6 +163,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           INPUT_TAG: ${{ inputs.tag }}
+          PREVIEW: ${{ inputs.preview }}
         run: |
           set -euo pipefail
           [[ "$INPUT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
@@ -181,7 +187,7 @@ jobs:
           for asset in "${ASSETS[@]}"; do test -s "$asset"; done
           (cd dist/release && sha256sum "snippet-deck-${INPUT_TAG}.apk" "SnippetDeck_${VERSION}_amd64.deb" "SnippetDeck_${VERSION}_x64_en-US.msi" "SnippetDeck_${VERSION}_arm64.dmg" "SnippetDeck_${VERSION}_intel.dmg" > SHA256SUMS.txt)
           test "$(wc -l < dist/release/SHA256SUMS.txt)" -eq 5
-          gh release create "$INPUT_TAG" "${ASSETS[@]}" dist/release/SHA256SUMS.txt --draft --target "$GITHUB_SHA" --title "SnippetDeck $INPUT_TAG" --generate-notes --notes "Installers for Android 13+, Windows, macOS (Apple Silicon and Intel), and Linux X11. Snippets remain local; cloud sync is not available. macOS installers are unsigned and may require Open Anyway. Linux Wayland text expansion is unavailable."
+          gh release create "$INPUT_TAG" "${ASSETS[@]}" dist/release/SHA256SUMS.txt --draft --target "$GITHUB_SHA" --title "SnippetDeck $INPUT_TAG" --generate-notes --notes "Optional Google Drive sync for Android and desktop. Local libraries remain available offline. Desktop installers are unsigned; macOS may require Open Anyway. Linux Wayland text expansion is unavailable."
           # Drafts are absent from the releases/tags endpoint until published.
           RELEASE_ID=$(gh api "repos/${GH_REPO}/releases" --jq ".[] | select(.tag_name == \"${INPUT_TAG}\" and .draft == true) | .id")
           test -n "$RELEASE_ID"
@@ -192,4 +198,8 @@ jobs:
           done
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
           test "$(gh api "repos/${GH_REPO}/releases/${RELEASE_ID}" --jq '.assets | length')" -eq 6
-          gh release edit "$INPUT_TAG" --draft=false --latest
+          if [ "$PREVIEW" = "true" ]; then
+            gh release edit "$INPUT_TAG" --draft=false --prerelease
+          else
+            gh release edit "$INPUT_TAG" --draft=false --latest
+          fi

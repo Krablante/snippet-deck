@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.rrajath.expander.service.TextExpansionService
+import com.rrajath.expander.sync.SyncUiState
 import com.rrajath.expander.ui.theme.snippetDeckColors
 import com.rrajath.expander.update.UpdateUiState
 import com.rrajath.expander.update.updateStatusText
@@ -37,6 +38,15 @@ internal fun SettingsScreen(
     onCopyTextClick: () -> Unit,
     onImportText: (String) -> Unit,
     onThemeChanged: () -> Unit = {},
+    snippetCount: Int = 0,
+    syncState: SyncUiState = SyncUiState.Off,
+    syncConnected: Boolean = false,
+    syncHasHistory: Boolean = false,
+    onSync: () -> Unit = {},
+    onDisconnectSync: () -> Unit = {},
+    onResetSync: () -> Unit = {},
+    onReplaceCloud: () -> Unit = {},
+    onUseOtherDevice: () -> Unit = {},
     updateState: UpdateUiState = UpdateUiState.Idle,
     onCheckForUpdates: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -46,6 +56,9 @@ internal fun SettingsScreen(
     var currentTheme by remember { mutableStateOf(ThemePreferences.getThemeMode(context)) }
     var showThemeDialog by remember { mutableStateOf(false) }
     var showTextImportDialog by remember { mutableStateOf(false) }
+    var showReplaceCloudDialog by remember { mutableStateOf(false) }
+    var showUseOtherDialog by remember { mutableStateOf(false) }
+    var showResetSyncDialog by remember { mutableStateOf(false) }
     val versionName = remember(context) {
         runCatching {
             context.packageManager.getPackageInfo(
@@ -75,6 +88,52 @@ internal fun SettingsScreen(
                 showTextImportDialog = false
                 onImportText(backupText)
             }
+        )
+    }
+
+    if (showReplaceCloudDialog) {
+        AlertDialog(
+            onDismissRequest = { showReplaceCloudDialog = false },
+            title = { Text("Use this device's library?") },
+            text = { Text("This will replace conflicting cloud versions with the $snippetCount snippets on this device, including deletions. Other devices keep their local data until their next sync. Export a backup first if you might need the other versions.") },
+            confirmButton = {
+                Button(onClick = { showReplaceCloudDialog = false; onReplaceCloud() }) {
+                    Text("Use this device")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReplaceCloudDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showUseOtherDialog) {
+        AlertDialog(
+            onDismissRequest = { showUseOtherDialog = false },
+            title = { Text("Use the other device's library?") },
+            text = { Text("Your local snippets will be replaced by the copy saved in Google Drive by the other device, including deletions. Export a backup first if you need this device's edits.") },
+            confirmButton = {
+                Button(onClick = { showUseOtherDialog = false; onUseOtherDevice() }) {
+                    Text("Use other device")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUseOtherDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showResetSyncDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetSyncDialog = false },
+            title = { Text("Switch Google accounts?") },
+            text = { Text("First revoke SnippetDeck access in your Google Account's connected apps, then connect a different account here. This clears only this device's sync history, not its snippets or the cloud files. Reconnecting the same account may bring back old deleted snippets.") },
+            confirmButton = {
+                Button(onClick = { showResetSyncDialog = false; onResetSync() }) { Text("Reset sync history") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetSyncDialog = false }) { Text("Cancel") }
+            },
         )
     }
 
@@ -172,6 +231,46 @@ internal fun SettingsScreen(
                 },
                 onClick = { showThemeDialog = true }
             )
+
+            HorizontalDivider()
+
+            Text("Google Drive sync", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Keep snippets on this device and sync through your Google account. Cloud copies are readable by Google. Changes on another device appear when you open SnippetDeck or tap Sync now.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(when (syncState) {
+                        SyncUiState.Off -> "Not connected"
+                        SyncUiState.Ready -> "Connected · waiting to sync"
+                        SyncUiState.Working -> "Syncing…"
+                        is SyncUiState.Synced -> "Up to date · ${syncState.count} snippets"
+                        is SyncUiState.Conflict -> "Conflicting edits: ${syncState.triggers.joinToString()}"
+                        is SyncUiState.Failed -> "Sync failed: ${syncState.message}"
+                    }, style = MaterialTheme.typography.bodyMedium)
+                    Button(onClick = onSync, enabled = syncState != SyncUiState.Working) {
+                        Text(if (syncConnected) "Sync now" else "Connect Google Drive")
+                    }
+                    if (syncConnected) {
+                        TextButton(onClick = { showReplaceCloudDialog = true }, enabled = syncState != SyncUiState.Working) {
+                            Text("Use this device's library in cloud")
+                        }
+                        TextButton(onClick = { showUseOtherDialog = true }, enabled = syncState != SyncUiState.Working) {
+                            Text("Use other device's library")
+                        }
+                        TextButton(onClick = onDisconnectSync, enabled = syncState != SyncUiState.Working) {
+                            Text("Disconnect on this device")
+                        }
+                    }
+                    if (syncHasHistory) {
+                        TextButton(onClick = { showResetSyncDialog = true }, enabled = syncState != SyncUiState.Working) {
+                            Text("Switch Google account…")
+                        }
+                    }
+                }
+            }
 
             HorizontalDivider()
 

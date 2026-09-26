@@ -52,6 +52,11 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .service-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 4px 17px; border-bottom: 1px solid var(--line); }
 .service-row strong { display: block; font-size: 13px; font-weight: 620; }
 .service-row small { display: block; max-width: 290px; margin-top: 4px; font-size: 12px; line-height: 1.35; color: var(--muted); }
+.sync-row { padding-top: 14px; padding-bottom: 14px; }
+.sync-row > div { min-width: 0; }
+.sync-row small { overflow-wrap: anywhere; }
+.sync-button { flex: none; min-height: 38px; border: 1px solid var(--line); border-radius: 9px; background: var(--field); color: var(--accent); padding: 0 10px; font-size: 12px; font-weight: 620; }
+.sync-button:disabled { opacity: .55; cursor: progress; }
 .switch { width: 42px; height: 26px; flex: none; display: inline-flex; position: relative; align-items: center; cursor: pointer; }
 .switch input { opacity: 0; position: absolute; width: 100%; height: 100%; margin: 0; cursor: pointer; }
 .switch span { width: 42px; height: 25px; border-radius: 20px; background: var(--line); transition: background .17s; }

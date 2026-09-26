@@ -2,7 +2,7 @@
 
 ## Goals
 
-SnippetDeck favors a small local-first architecture, predictable behavior, and portable recovery over infrastructure. It has no account system or backend; each device stores its own library. Transfer between devices requires an explicit backup export and import.
+SnippetDeck favors a small local-first architecture, predictable behavior, and portable recovery over infrastructure. It has no account system or backend; each device stores its own library. Google Drive sync is optional, and portable backup export/import remains available without it.
 
 The design prioritizes:
 
@@ -20,6 +20,7 @@ Compose UI ──► SnippetRepository ──► Room database
     │                 └────────────► accessibility cache
     │                                      │
     ├──► backup/import UI                  ▼
+    ├──► optional Drive sync
     └──► UpdateViewModel       TextExpansionService
               │                          │
               ▼                          ▼
@@ -55,11 +56,11 @@ Each snippet has one primary trigger and zero or more aliases:
 
 A complete restore validates the input and then replaces the library in one Room transaction. Fresh local IDs are assigned during import.
 
-Desktop keeps a separate local JSON file under the OS application-data directory. Saves write a temporary file in the same directory and rename it over the old copy. The file uses the Android backup envelope with `format=snippetdeck-backup` and `schemaVersion=2`, so export and import are reversible across platforms. This is still a **backup format**, not a conflict-aware sync protocol: records lack stable cross-device identities and deletion history. Avoid pointing two live desktop installations at the same working file.
+Desktop keeps a separate local JSON file under the OS application-data directory. Saves write a temporary file in the same directory and rename it over the old copy. The file uses the Android backup envelope with `format=snippetdeck-backup` and `schemaVersion=2`, so export and import are reversible across platforms. Sync has its own versioned format and local metadata file; backup imports still replace the full library after confirmation. Avoid pointing two live desktop installations at the same working file.
 
 ## Compose UI
 
-The Compose interface provides snippet editing, search, enabled state, accessibility onboarding, theme selection, backup and transfer, and manual update checks. Import always previews the source and snippet count and warns that the current library will be replaced.
+The Compose interface provides snippet editing, search, enabled state, accessibility onboarding, theme selection, backup and transfer, Google Drive connection, and manual update checks. Import always previews the source and snippet count and warns that the current library will be replaced.
 
 White, Black, and Sepia use deterministic Material 3 schemes adapted from Textory. Dynamic wallpaper colors are deliberately disabled so canvas, cards, contrast, and screenshots remain predictable. The persisted legacy Light/Dark/System values migrate to the closest explicit palette without discarding other preferences.
 
@@ -79,7 +80,15 @@ Desktop uses a small static web interface following the same White, Black, and S
 
 `ImportExportManager` reads and writes content URIs with strict size limits. Clipboard interaction stays in the UI layer.
 
-The desktop import accepts Android's JSON envelope, raw-array and legacy backups, and compressed text V1/V2. It validates the complete library and previews the count before a full replacement. The desktop export writes the same versioned JSON envelope, without local row IDs. A user can transfer the exported file through Google Drive manually. Automatic cloud sync would require durable record identities and conflict handling, and is not part of this design.
+The desktop import accepts Android's JSON envelope, raw-array and legacy backups, and compressed text V1/V2. It validates the complete library and previews the count before a full replacement. The desktop export writes the same versioned JSON envelope, without local row IDs. Backups are for explicit recovery, not the cloud sync transport.
+
+## Optional Google Drive sync
+
+`SyncLibrary` on Android and `sync.rs` on desktop implement the same `snippetdeck-sync` v1 format. The key of a sync record is its case-insensitive primary trigger; changing a trigger is a deletion and a creation. Each record holds its snippet or a deletion marker and a small version clock. An installation stores a local baseline outside the Android backup area or beside the desktop library. Local edits produce a new version relative to that baseline. Independent changes merge; concurrent different values of the same trigger remain unresolved until the user explicitly chooses a library. The existing backup validator rejects alias collisions before applying a merge. An Android Room transaction refuses to replace snippets if they changed during the network request; desktop checks its current library under a lock before saving.
+
+Every installation owns a separate file in the account's hidden Drive `appDataFolder`. No device overwrites another device's file. This avoids an unsafe last-writer-wins update when two devices sync at once. A conflicted merge stays in local sync metadata and is not uploaded as the device's chosen library. Selecting **Use this device** records a version that incorporates all versions the device has seen; **Use other device** accepts the one other device's resolved copy. Deletion markers prevent offline copies from reviving deleted snippets. Files remain bounded by the app's size limits and are transferred only on a foreground app open, a local edit, or a manual action; there is no background polling or server.
+
+Android requests the non-sensitive `drive.appdata` scope through Google Play services when the user connects. Desktop uses the system browser and a PKCE loopback callback; its refresh token belongs in the operating-system credential store, with session-only access if that store is unavailable. Tokens are separate from backups and never enter the WebView. `GoogleDriveSync` and `google.rs` own the Drive HTTP operations; the UI handles consent and explicit conflict choices. The user can disconnect without deleting their local library or cloud history. The provider can read the cloud data because the files are not end-to-end encrypted.
 
 ## Application updates
 
@@ -96,11 +105,10 @@ APK download starts only after explicit confirmation. Acceptance requires the ex
 
 ## Security and privacy boundaries
 
-- Network access is limited to public GitHub release metadata and a user-approved APK download.
-- Desktop has no networking component; the GitHub updater exists only on Android.
+- Android checks public GitHub release metadata and downloads an APK only after approval. The optional sync flow contacts Google OAuth and Drive; desktop has no update downloader.
 - Multiline desktop insertion briefly exposes snippet text to the local system clipboard. Clipboard managers may retain it; this is not a channel for secrets.
-- Snippets, observed text, settings, and backups are never sent with update requests.
-- There is no background network worker, polling process, data sync, or silent installation.
+- Snippets, observed text, settings, and backups are never sent with GitHub update requests. Only user-created snippets and sync metadata go to Drive after connecting; observed typing is never sent.
+- There is no background network worker, polling process, backend, or silent installation.
 - Observed editable text is not persisted or transmitted.
 - Export occurs only after explicit user action.
 - File and clipboard backups contain user data and must be treated as sensitive.

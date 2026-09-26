@@ -73,9 +73,10 @@ class SnippetViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun deleteSnippet(snippet: Snippet) {
+    fun deleteSnippet(snippet: Snippet, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             repository.delete(snippet)
+            onComplete()
         }
     }
 
@@ -86,13 +87,14 @@ class SnippetViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun toggleSnippetEnabled(snippet: Snippet) {
+    fun toggleSnippetEnabled(snippet: Snippet, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             val updated = snippet.copy(
                 isEnabled = !snippet.isEnabled,
                 updatedAt = System.currentTimeMillis()
             )
             repository.update(updated)
+            onComplete()
         }
     }
 

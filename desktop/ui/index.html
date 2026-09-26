@@ -17,6 +17,10 @@
         <div id="menu" class="menu" hidden>
           <button id="import" type="button">Import backup…</button>
           <button id="export" type="button">Export backup…</button>
+          <button id="replace-cloud" type="button" hidden>Use this device's library in cloud…</button>
+          <button id="use-other" type="button" hidden>Use other device's library…</button>
+          <button id="disconnect-sync" type="button" hidden>Disconnect Google Drive</button>
+          <button id="reset-sync" type="button" hidden>Switch Google account…</button>
           <div class="menu-divider"></div>
           <label class="menu-check"><input id="startup" type="checkbox"> Start at login</label>
           <div class="menu-divider"></div>
@@ -39,6 +43,10 @@
         <div class="service-row">
           <div><strong>Text expansion</strong><small id="status">Starting…</small></div>
           <label class="switch" aria-label="Text expansion enabled"><input id="active" type="checkbox" checked><span></span></label>
+        </div>
+        <div class="service-row sync-row">
+          <div><strong>Google Drive</strong><small id="sync-status">Not connected</small></div>
+          <button id="sync" class="sync-button" type="button">Connect</button>
         </div>
         <div id="count" class="count"></div>
         <div id="list" class="snippet-list"></div>

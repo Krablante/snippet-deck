@@ -15,8 +15,8 @@ android {
         applicationId = "com.rrajath.expander"
         minSdk = 33
         targetSdk = 36
-        versionCode = 10600
-        versionName = "1.6.0"
+        versionCode = 10700
+        versionName = "1.7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -104,6 +104,7 @@ dependencies {
 
     // Gson for JSON import/export
     implementation(libs.gson)
+    implementation(libs.play.services.auth)
 
     testImplementation(libs.junit)
     testImplementation("org.json:json:20240303")
