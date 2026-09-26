@@ -1,7 +1,6 @@
 package com.rrajath.expander.ui.screens
 
 import android.content.Intent
-import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -57,14 +56,12 @@ internal fun SnippetListScreen(
     var highContrast by remember {
         mutableStateOf(Settings.Secure.getInt(context.contentResolver, "high_text_contrast_enabled", 0) == 1)
     }
-    var powerSave by remember { mutableStateOf(context.getSystemService(PowerManager::class.java)?.isPowerSaveMode == true) }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 accessibilityEnabled = TextExpansionService.isAccessibilityServiceEnabled(context)
                 serviceEnabled = TextExpansionService.isServiceEnabled(context)
                 highContrast = Settings.Secure.getInt(context.contentResolver, "high_text_contrast_enabled", 0) == 1
-                powerSave = context.getSystemService(PowerManager::class.java)?.isPowerSaveMode == true
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -72,10 +69,10 @@ internal fun SnippetListScreen(
     }
     val colors = MaterialTheme.colorScheme
     val reduceTransparency by ThemePreferences.reduceTransparency.collectAsState()
-    val opaqueControls = reduceTransparency || highContrast || powerSave
+    val opaqueControls = reduceTransparency || highContrast
     val hazeState = rememberHazeState()
 
-    Box(modifier = modifier.fillMaxSize().background(colors.background).statusBarsPadding().navigationBarsPadding()) {
+    Box(modifier = modifier.fillMaxSize().background(colors.background).statusBarsPadding().navigationBarsPadding().imePadding()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(top = 8.dp)
                 .then(if (opaqueControls) Modifier else Modifier.hazeSource(state = hazeState)),
@@ -176,7 +173,7 @@ internal fun SnippetListScreen(
         }
 
         Row(
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().imePadding()
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,

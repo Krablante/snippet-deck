@@ -38,7 +38,7 @@ Android: **Settings → Backup & transfer** exports a JSON file or compact text,
 
 The working library stays in each device's app data. Keep backup files somewhere you control; they can contain sensitive text. Old raw-array JSON, v1.0 JSON, and text V1 backups remain readable.
 
-On Android the floating toolbar, search, and add button are glass blocks. Text passing beneath them is diffused and refracted at their edges. Turn on **Settings → Appearance → Reduce transparency** for solid controls. The app also uses solid controls when high contrast or power saving is active.
+On Android the floating toolbar, search, and add button are glass blocks. Text passing beneath them is diffused and refracted at their edges. Turn on **Settings → Appearance → Reduce transparency** for solid controls. System high contrast also uses solid controls; battery saver leaves your choice in place.
 
 ## Sync with Google Drive (optional)
 

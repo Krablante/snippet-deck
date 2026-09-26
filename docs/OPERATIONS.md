@@ -12,7 +12,7 @@ The Android and desktop source toolchains and local test commands are in [Contri
 
 ## Release from `main`
 
-Release through `.github/workflows/release.yml` with a semantic tag such as `v1.8.4`. It must contain the official signed APK and all four installers. Both apps resolve GitHub `releases/latest`, so a desktop-only latest release would break Android's updater.
+Release through `.github/workflows/release.yml` with a semantic tag such as `v1.8.5`. It must contain the official signed APK and all four installers. Both apps resolve GitHub `releases/latest`, so a desktop-only latest release would break Android's updater.
 
 Before dispatching the workflow:
 
