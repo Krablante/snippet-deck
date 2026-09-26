@@ -160,7 +160,7 @@ Clone the repository, configure your Android SDK in an ignored `local.properties
 
 The debug APK is written under `app/build/outputs/apk/debug/` and uses a separate application ID, so it can be installed alongside an official release.
 
-For desktop, install Rust and the [Tauri desktop prerequisites](https://v2.tauri.app/start/prerequisites/) (plus `libxdo-dev` on Debian/Ubuntu Linux), then build from `desktop/src-tauri` using `cargo build --locked`. The editor uses static HTML/CSS/JavaScript in `desktop/ui`; no frontend package install is needed. GitHub Actions creates the OS-specific installers.
+For desktop, install Rust and the [Tauri desktop prerequisites](https://v2.tauri.app/start/prerequisites/) (plus `libxdo-dev` on Debian/Ubuntu Linux), then build from `desktop/src-tauri` using `cargo build --locked`. The editor uses static HTML/CSS/JavaScript in `desktop/ui`; no frontend package install is needed. GitHub Actions creates the OS-specific installers. Local desktop builds need the `SNIPPETDECK_DESKTOP_OAUTH_CLIENT_SECRET` environment variable at build time for Google Drive sign-in; the library and backups work without it. See [Operations](docs/OPERATIONS.md) for details.
 
 See [Contributing](CONTRIBUTING.md) for development expectations and [Operations](docs/OPERATIONS.md) for signed builds and releases.
 
