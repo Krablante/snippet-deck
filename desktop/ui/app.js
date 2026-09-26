@@ -8,6 +8,8 @@ let syncConnected = false;
 let syncBusy = false;
 let syncPending = null;
 let lastPull = 0;
+let updateAvailable = null;
+let updateBusy = false;
 
 function notify(message) {
   const notice = $('notice');
@@ -21,11 +23,11 @@ function errorMessage(error) {
   return typeof error === 'string' ? error : error?.message || 'Something went wrong';
 }
 
-function ask(title, message, action) {
+function ask(title, message, action, danger = true) {
   $('confirm-title').textContent = title;
   $('confirm-message').textContent = message;
   $('confirm-action').textContent = action;
-  $('confirm-action').classList.add('danger-action');
+  $('confirm-action').classList.toggle('danger-action', danger);
   const dialog = $('confirm');
   dialog.returnValue = 'cancel';
   return new Promise(resolve => {
@@ -45,6 +47,15 @@ function theme(value) {
 function menu(open) {
   $('menu').hidden = !open;
   $('more').setAttribute('aria-expanded', String(open));
+}
+
+function showUpdate(release) {
+  updateAvailable = release;
+  $('update-row').hidden = !release;
+  if (release) {
+    $('update-version').textContent = release.version;
+    if (!updateBusy) $('update-status').textContent = 'A newer release is ready.';
+  }
 }
 
 function render() {
@@ -135,6 +146,7 @@ async function refresh() {
     $('use-other').hidden = !syncConnected;
     $('disconnect-sync').hidden = !syncConnected;
     $('reset-sync').hidden = !snapshot.syncHistory;
+    if (snapshot.updateAvailable) showUpdate(snapshot.updateAvailable);
     render();
   } catch (error) { $('status').textContent = errorMessage(error); render(); }
 }
@@ -172,7 +184,12 @@ async function syncDrive(interactive = false, keepLocal = false, useOther = fals
 }
 
 theme(localStorage.getItem('snippetdeck-theme') || 'white');
-refresh().then(() => { if (syncConnected) syncDrive(); });
+Promise.all([
+  window.__TAURI__?.event?.listen('snippetdeck-update-available', event => showUpdate(event.payload)),
+  window.__TAURI__?.event?.listen('snippetdeck-update-progress', event => {
+    $('update-status').textContent = `Downloading installer… ${event.payload}%`;
+  })
+]).catch(() => {}).then(() => refresh().then(() => { if (syncConnected) syncDrive(); }));
 $('new').addEventListener('click', () => edit());
 $('back').addEventListener('click', closeEditor);
 $('search').addEventListener('input', () => { visible = 80; render(); });
@@ -197,6 +214,40 @@ window.addEventListener('focus', async () => {
   if (syncConnected && Date.now() - lastPull > 60_000) syncDrive();
 });
 $('sync').addEventListener('click', () => syncDrive(true));
+$('check-update').addEventListener('click', async () => {
+  menu(false);
+  const button = $('check-update');
+  button.disabled = true;
+  button.textContent = 'Checking…';
+  try {
+    const release = await invoke('check_for_updates');
+    showUpdate(release);
+    notify(release ? `SnippetDeck ${release.version} is available` : 'SnippetDeck is up to date');
+  } catch (error) {
+    notify(`Update check failed: ${errorMessage(error)}`);
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Check for updates';
+  }
+});
+$('install-update').addEventListener('click', async () => {
+  if (updateBusy || !updateAvailable) return;
+  if (!await ask(`Install SnippetDeck ${updateAvailable.version}?`, 'Download the installer from GitHub, verify its SHA-256, and open the system installer? Your local library will remain on this device.', 'Download & open', false)) return;
+  updateBusy = true;
+  $('install-update').disabled = true;
+  $('update-status').textContent = 'Downloading installer…';
+  try {
+    const path = await invoke('install_update');
+    $('update-status').textContent = `Installer opened · ${path}`;
+    notify('Finish the update in the system installer');
+  } catch (error) {
+    $('update-status').textContent = `Update failed: ${errorMessage(error)}`;
+    notify(errorMessage(error));
+  } finally {
+    updateBusy = false;
+    $('install-update').disabled = false;
+  }
+});
 $('replace-cloud').addEventListener('click', async () => {
   menu(false);
   if (await ask('Use this device’s library?', `This will replace conflicting cloud versions with the ${snippets.length} snippets on this device, including deletions. Export a backup first if you need the other edits.`, 'Use this device')) syncDrive(true, true);

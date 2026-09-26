@@ -4,6 +4,7 @@ mod expansion;
 mod google;
 mod library;
 mod sync;
+mod update;
 
 use expansion::Expander;
 use library::{Library, Snippet};
@@ -21,7 +22,7 @@ use sync::{same_library, LocalState};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    Manager,
+    Emitter, Manager,
 };
 use tauri_plugin_autostart::ManagerExt;
 
@@ -35,6 +36,9 @@ struct AppState {
     sync_lock: Mutex<()>,
     sync_active: AtomicBool,
     access: Mutex<Option<google::Access>>,
+    available_update: Mutex<Option<update::Release>>,
+    update_lock: Mutex<()>,
+    install_lock: Mutex<()>,
     expander: Arc<Expander>,
 }
 
@@ -47,6 +51,7 @@ struct Snapshot {
     status: String,
     sync_connected: bool,
     sync_history: bool,
+    update_available: Option<update::Release>,
 }
 
 #[cfg(test)]
@@ -59,11 +64,13 @@ fn snapshot_uses_the_field_names_read_by_the_editor() {
         status: String::new(),
         sync_connected: true,
         sync_history: true,
+        update_available: None,
     };
     let value = serde_json::to_value(snapshot).unwrap();
     assert_eq!(value["startAtLogin"], true);
     assert_eq!(value["syncConnected"], true);
     assert_eq!(value["syncHistory"], true);
+    assert!(value["updateAvailable"].is_null());
 }
 
 #[tauri::command]
@@ -75,7 +82,42 @@ fn snapshot(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Snapsho
         status: state.expander.status.read().unwrap().clone(),
         sync_connected: state.sync_active.load(Ordering::Relaxed),
         sync_history: state.sync_path.exists(),
+        update_available: state.available_update.lock().unwrap().clone(),
     }
+}
+
+#[tauri::command]
+async fn check_for_updates(app: tauri::AppHandle) -> Result<Option<update::Release>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _guard = state.update_lock.lock().unwrap();
+        let found = update::check(&app.package_info().version.to_string())?;
+        *state.available_update.lock().unwrap() = found.clone();
+        Ok(found)
+    })
+    .await
+    .map_err(|e| format!("Update check stopped: {e}"))?
+}
+
+#[tauri::command]
+async fn install_update(app: tauri::AppHandle) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _guard = state.install_lock.lock().unwrap();
+        let release = state.available_update.lock().unwrap().clone()
+            .ok_or("Check for updates before downloading")?;
+        let cache = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("updates");
+        let path = update::download(&release, &cache, |received| {
+            let percent = (received * 100 / release.size) as u8;
+            let _ = app.emit("snippetdeck-update-progress", percent);
+        })?;
+        update::open_installer(&path)?;
+        #[cfg(target_os = "windows")]
+        app.exit(0);
+        Ok(path.display().to_string())
+    })
+    .await
+    .map_err(|e| format!("Update installation stopped: {e}"))?
 }
 
 fn save_change(
@@ -491,7 +533,9 @@ fn main() {
             export_file,
             sync_now,
             disconnect_sync,
-            reset_sync
+            reset_sync,
+            check_for_updates,
+            install_update
         ])
         .setup(|app| {
             let path = app.path().app_data_dir()?.join("library.json");
@@ -513,6 +557,9 @@ fn main() {
                 sync_disabled_path,
                 sync_lock: Mutex::new(()),
                 access: Mutex::new(None),
+                available_update: Mutex::new(None),
+                update_lock: Mutex::new(()),
+                install_lock: Mutex::new(()),
                 expander: expander.clone(),
             });
             expander.start();
@@ -538,6 +585,15 @@ fn main() {
                     _ => {}
                 })
                 .build(app)?;
+            let update_app = app.handle().clone();
+            std::thread::spawn(move || {
+                let state = update_app.state::<AppState>();
+                let _guard = state.update_lock.lock().unwrap();
+                if let Ok(Some(release)) = update::check(&update_app.package_info().version.to_string()) {
+                    *state.available_update.lock().unwrap() = Some(release.clone());
+                    let _ = update_app.emit("snippetdeck-update-available", release);
+                }
+            });
             if !std::env::args().any(|arg| arg == "--background") {
                 open_editor(app.handle());
             }

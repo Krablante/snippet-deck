@@ -103,9 +103,11 @@ A normal launcher start performs at most one silent metadata check per activity/
 
 APK download starts only after explicit confirmation. Acceptance requires the exact `snippet-deck-v<version>.apk` asset, a valid GitHub SHA-256 digest, the official application ID, matching semantic version, increasing version code, and the pinned release-signing certificate. Android still shows its own installation confirmation.
 
+The desktop Rust `update.rs` checks the same latest stable release once at startup and on demand from the editor menu. It requires an increasing semantic version and the exact installer asset for the operating system and CPU architecture. A download starts only after confirmation; its byte count and SHA-256 must match the GitHub release metadata. A verified installer is cached in the OS application cache and opened by `msiexec.exe`, `open`, or `xdg-open`; Windows exits the running app so MSI can replace it. The OS handles installation and its own prompts. Neither platform polls in the background.
+
 ## Security and privacy boundaries
 
-- Android checks public GitHub release metadata and downloads an APK only after approval. The optional sync flow contacts Google OAuth and Drive; desktop has no update downloader.
+- Android and desktop check public GitHub release metadata and download an installer only after approval. The optional sync flow contacts Google OAuth and Drive.
 - Multiline desktop insertion briefly exposes snippet text to the local system clipboard. Clipboard managers may retain it; this is not a channel for secrets.
 - Snippets, observed text, settings, and backups are never sent with GitHub update requests. Only user-created snippets and sync metadata go to Drive after connecting; observed typing is never sent.
 - There is no background network worker, polling process, backend, or silent installation.

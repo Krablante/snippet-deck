@@ -55,6 +55,10 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .sync-row { padding-top: 14px; padding-bottom: 14px; }
 .sync-row > div { min-width: 0; }
 .sync-row small { overflow-wrap: anywhere; }
+.update-row { padding-top: 14px; padding-bottom: 14px; }
+.update-row > div { min-width: 0; }
+.update-row small { overflow-wrap: anywhere; }
+.update-row .sync-button { max-width: 112px; }
 .sync-button { flex: none; min-height: 38px; border: 1px solid var(--line); border-radius: 9px; background: var(--field); color: var(--accent); padding: 0 10px; font-size: 12px; font-weight: 620; }
 .sync-button:disabled { opacity: .55; cursor: progress; }
 .switch { width: 42px; height: 26px; flex: none; display: inline-flex; position: relative; align-items: center; cursor: pointer; }

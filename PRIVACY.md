@@ -10,6 +10,6 @@ On Android, Google Play services handles authorization. On desktop, the app open
 
 ## Other data flows
 
-On Android, SnippetDeck contacts GitHub to check public release metadata and downloads an APK only with your approval. No snippet content is included in update requests. Manual file and clipboard backups contain your snippets and go only where you choose to save or paste them. Desktop multiline insertion temporarily uses the system clipboard; local clipboard managers may retain that text.
+On Android and desktop, SnippetDeck contacts GitHub to check public release metadata and downloads an installer only with your approval. No snippet content is included in update requests. Manual file and clipboard backups contain your snippets and go only where you choose to save or paste them. Desktop multiline insertion temporarily uses the system clipboard; local clipboard managers may retain that text.
 
 There is no analytics, advertising, SnippetDeck account, or SnippetDeck backend. For questions or privacy requests, open a [GitHub issue](https://github.com/Krablante/snippet-deck/issues).

@@ -22,6 +22,8 @@
           <button id="disconnect-sync" type="button" hidden>Disconnect Google Drive</button>
           <button id="reset-sync" type="button" hidden>Switch Google account…</button>
           <div class="menu-divider"></div>
+          <button id="check-update" type="button">Check for updates</button>
+          <div class="menu-divider"></div>
           <label class="menu-check"><input id="startup" type="checkbox"> Start at login</label>
           <div class="menu-divider"></div>
           <div class="menu-label">Appearance</div>
@@ -47,6 +49,10 @@
         <div class="service-row sync-row">
           <div><strong>Google Drive</strong><small id="sync-status">Not connected</small></div>
           <button id="sync" class="sync-button" type="button">Connect</button>
+        </div>
+        <div id="update-row" class="service-row update-row" hidden>
+          <div><strong>SnippetDeck <span id="update-version"></span> available</strong><small id="update-status">A newer release is ready.</small></div>
+          <button id="install-update" class="sync-button" type="button">Install update</button>
         </div>
         <div id="count" class="count"></div>
         <div id="list" class="snippet-list"></div>

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag, for example v1.7.0
+        description: Release tag, for example v1.8.0
         required: true
         type: string
       preview:
@@ -117,7 +117,7 @@ jobs:
           test -f "$APK"
           test "$(bash "$APKANALYZER" manifest application-id "$APK")" = "com.rrajath.expander"
           test "$(bash "$APKANALYZER" manifest version-name "$APK")" = "$EXPECTED_VERSION"
-          test "$(bash "$APKANALYZER" manifest version-code "$APK")" = "10701"
+          test "$(bash "$APKANALYZER" manifest version-code "$APK")" = "10800"
           "$APKSIGNER" verify --verbose "$APK"
 
           ACTUAL_SIGNER_SHA256=$("$APKSIGNER" verify --print-certs "$APK" 2>&1 | grep -oE '[[:xdigit:]]{64}' | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -d '\r\n')
@@ -225,7 +225,7 @@ jobs:
           for asset in "${ASSETS[@]}"; do test -s "$asset"; done
           (cd dist/release && sha256sum "snippet-deck-${INPUT_TAG}.apk" "SnippetDeck_${VERSION}_amd64.deb" "SnippetDeck_${VERSION}_x64_en-US.msi" "SnippetDeck_${VERSION}_arm64.dmg" "SnippetDeck_${VERSION}_intel.dmg" > SHA256SUMS.txt)
           test "$(wc -l < dist/release/SHA256SUMS.txt)" -eq 5
-          gh release create "$INPUT_TAG" "${ASSETS[@]}" dist/release/SHA256SUMS.txt --draft --target "$GITHUB_SHA" --title "SnippetDeck $INPUT_TAG" --generate-notes --notes "Optional Google Drive sync for Android and desktop. Local libraries remain available offline. Desktop installers are unsigned; macOS may require Open Anyway. Linux Wayland text expansion is unavailable."
+          gh release create "$INPUT_TAG" "${ASSETS[@]}" dist/release/SHA256SUMS.txt --draft --target "$GITHUB_SHA" --title "SnippetDeck $INPUT_TAG" --generate-notes --notes "Desktop now checks for updates at startup and from More options. Confirm to download a verified installer, then finish installation with your OS. Local libraries remain available offline. Desktop installers are unsigned; macOS may require Open Anyway. Linux Wayland text expansion is unavailable."
           # Drafts are absent from the releases/tags endpoint until published.
           RELEASE_ID=$(gh api "repos/${GH_REPO}/releases" --jq ".[] | select(.tag_name == \"${INPUT_TAG}\" and .draft == true) | .id")
           test -n "$RELEASE_ID"

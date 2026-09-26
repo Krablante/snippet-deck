@@ -78,15 +78,17 @@ Launch the app and leave it running to expand text. Closing the editor keeps the
 
 ## Updates
 
-On a normal Android app launch, SnippetDeck makes one quiet request to the public GitHub Releases API when Android reports a validated internet connection. Nothing is shown when the installed version is current, the device is offline, or the automatic check fails. Desktop installers currently have no in-app updater.
+On a normal Android app launch, SnippetDeck makes one quiet request to the public GitHub Releases API when Android reports a validated internet connection. Nothing is shown when the installed version is current, the device is offline, or the automatic check fails. Desktop makes one quiet check at startup, including when it starts in the tray. An available release appears in the library; offline and failed automatic checks stay silent.
 
-You can also open **Settings → About → Check for updates** at any time. Downloading and installation always require an explicit tap. Before Android opens its package installer, SnippetDeck verifies:
+On Android, you can also open **Settings → About → Check for updates** at any time. Downloading and installation always require an explicit tap. Before Android opens its package installer, SnippetDeck verifies:
 
 - The exact versioned APK asset and GitHub-provided SHA-256 digest.
 - The application ID, version name, and increasing version code.
 - The official SnippetDeck signing certificate.
 
-There is no background polling or automatic installation. Contextual `PROCESS_TEXT` launches never trigger an update check.
+On desktop, use **More options → Check for updates** for a visible result or retry. Select **Install update** and confirm to download the matching `.msi`, `.dmg`, or `.deb` from the latest stable release. SnippetDeck checks its size and GitHub SHA-256 digest before opening the operating system's installer. Finish the installation there: Windows closes the running app for MSI, macOS opens the disk image for you to move the app into Applications, and Linux opens the Debian package with its configured handler. If Linux has no package handler, use the displayed downloaded path with your package manager. Existing local libraries are preserved by an in-place installation.
+
+There is no background polling or automatic installation. Contextual Android `PROCESS_TEXT` launches never trigger an update check.
 
 ## Use
 
@@ -139,7 +141,7 @@ On Android, SnippetDeck uses the accessibility API to detect triggers and replac
 
 - On Android, snippets and settings stay in the local Room database. Desktop keeps its library and settings in local app data.
 - When you connect Google Drive, both platforms send snippets, deletions, and sync metadata to the app's folder in your account. Without that choice, snippet content stays local except when you explicitly export or copy it.
-- Android checks GitHub for release metadata and downloads an APK only after approval. Neither platform sends observed typing to Google or GitHub.
+- Android and desktop check GitHub for release metadata and download an installer only after approval. Neither platform sends observed typing to Google or GitHub.
 - Desktop multiline expansion briefly uses the system clipboard and attempts to restore its previous content. Clipboard managers may retain copied text; avoid storing secrets in multiline snippets.
 - There is no SnippetDeck account system, server, analytics, advertising, remote control, or background polling.
 - Official updates must keep the same Android signing identity so they can be installed over an existing version without clearing local data.
