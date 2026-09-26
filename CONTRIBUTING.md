@@ -21,7 +21,7 @@ Debug builds use the `.debug` application ID suffix and can be installed alongsi
 - Keep the architecture local-first and avoid introducing services or dependencies without a concrete product need.
 - Desktop local data must remain compatible with Android JSON and text backups. Preserve full-replacement import confirmation, primary/alias uniqueness, and the cursor's surrounding text when expanding.
 - Multiline desktop expansion must not simulate Enter in a target field. Preserve clipboard content when using paste and stop before changing the field if insertion cannot be prepared.
-- Do not create a desktop-only latest release without an official Android APK; the Android updater resolves GitHub's latest release.
+- Every stable release must contain the verified official signed Android APK alongside the desktop installers; the Android updater resolves GitHub's latest release.
 - Preserve cursor-aware replacement: only the trigger immediately before the cursor is replaced, text after the cursor remains intact, and the cursor moves to the end of the expansion.
 - Never make expansion submit or send the target field.
 - Keep every primary trigger and alias globally unique, case-insensitively.

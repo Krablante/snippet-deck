@@ -4,7 +4,7 @@ This document covers public installation, builds, releases, and user-data recove
 
 ## Desktop builds and installation
 
-The `Desktop builds` workflow compiles the same Rust source on Windows, macOS, and Linux. Its build artifacts contain `.msi`, `.dmg`, and `.deb` installers respectively. A manual run from `main` publishes them as a **desktop prerelease**. These builds are unsigned; macOS Gatekeeper may require a manual **Open Anyway** decision. Keep the desktop release marked as a prerelease: Android's updater expects the latest stable release to include an official signed APK.
+The `Desktop builds` workflow compiles the same Rust source on Windows, macOS, and Linux. Its build artifacts contain `.msi`, `.dmg`, and `.deb` installers respectively; manual runs leave artifacts in Actions without publishing a release. The `Release SnippetDeck` workflow combines those four installers with the official signed Android APK in a single stable release. Android's updater expects the latest stable release to include an official signed APK. Desktop builds are unsigned; macOS Gatekeeper may require a manual **Open Anyway** decision.
 
 Run SnippetDeck after installation. The tray's **Open library** item opens the editor; closing the editor keeps expansion active. Choose **Start at login** in the editor's menu to make the agent available after sign-in. If you grant Accessibility permission on macOS after starting SnippetDeck, quit and reopen it. Linux expansion is supported in an X11 session; in Wayland the editor works, while expansion is disabled.
 
@@ -56,18 +56,19 @@ Never commit a keystore or signing credentials. A build signed with a different 
 
 ## Official GitHub release
 
-The `Release APK` workflow is started manually with a semantic version such as `1.5.0`. It:
+The `Release SnippetDeck` workflow is started manually from `main` with a semantic tag such as `v1.6.0`. It:
 
 1. Checks out the selected revision.
 2. Restores the release keystore from encrypted GitHub Actions secrets.
 3. Runs unit tests, lint, and the release build.
 4. Verifies application ID, version name, APK signature validity, and the pinned release certificate.
-5. Publishes `snippet-deck-v<version>.apk` under the matching `v<version>` tag.
+5. Builds the Windows, macOS (Apple Silicon and Intel), and Linux X11 installers from the same commit.
+6. Uploads the five assets and a checksum list to a draft release, checks the APK digest and asset count, then publishes it as the latest stable release.
 
 Before starting the workflow:
 
-- Update `versionName` and `versionCode` in `app/build.gradle.kts`.
-- Confirm that the workflow input, `versionName`, and release tag describe the same version.
+- Update `versionName` and the increasing `versionCode` in `app/build.gradle.kts`, plus the version in `desktop/src-tauri/Cargo.toml` and `desktop/src-tauri/tauri.conf.json`. Update the release workflow's expected Android version code when bumping it.
+- Confirm that the workflow input, both platform versions, and the release tag describe the same version.
 - Review user-visible documentation and compatibility notes.
 - Confirm CI is green.
 
@@ -78,6 +79,7 @@ After publication:
 - Test one primary trigger, one alias, Backspace undo, and `!help`.
 - Export and re-import a backup on a disposable test installation.
 - Confirm the anonymous `releases/latest` API exposes the APK size and `sha256:` digest.
+- Confirm the same release includes both macOS installers, the Windows installer, and the Linux installer.
 - Use the previous official version to check, download, verify, and hand off the update to Android's installer.
 
 ## Update troubleshooting

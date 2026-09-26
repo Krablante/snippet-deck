@@ -70,7 +70,7 @@ SnippetDeck requires Android 13 or newer.
 
 ### Desktop
 
-Windows, macOS (Apple Silicon and Intel), and Linux X11 installers are published as a [desktop preview](https://github.com/Krablante/snippet-deck/releases/tag/desktop-v0.1.0) (`.msi`, `.dmg`, or `.deb`). Development builds are also available from the [Desktop builds workflow](https://github.com/Krablante/snippet-deck/actions/workflows/desktop.yml). The macOS builds are currently unsigned and have not yet been tested on a Mac; Gatekeeper may require an explicit **Open Anyway** decision. Windows and macOS compatibility should be verified on real machines before relying on them for everyday use.
+Download the Windows, macOS (Apple Silicon or Intel), or Linux X11 installer (`.msi`, `.dmg`, or `.deb`) alongside the Android APK from the [latest GitHub release](https://github.com/Krablante/snippet-deck/releases/latest). Development builds are also available from the [Desktop builds workflow](https://github.com/Krablante/snippet-deck/actions/workflows/desktop.yml). The macOS builds are currently unsigned and have not yet been tested on a Mac; Gatekeeper may require an explicit **Open Anyway** decision. Windows and macOS compatibility should be verified on real machines before relying on them for everyday use.
 
 Launch the app and leave it running to expand text. Closing the editor keeps the background agent available in the tray. **More options → Start at login** enables automatic launch; **Text expansion** pauses it. On macOS, grant the app Accessibility permission when prompted, then reopen it. On Linux Wayland, the library editor remains usable, but automatic text expansion is not supported. The X11 build does not require root privileges.
 

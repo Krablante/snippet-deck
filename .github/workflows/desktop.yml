@@ -49,23 +49,3 @@ jobs:
           path: desktop/src-tauri/target/release/bundle/${{ matrix.bundle }}/*
           if-no-files-found: error
           retention-days: 14
-
-  publish:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: snippetdeck-*
-          path: dist
-      - name: Publish desktop preview
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          mv dist/snippetdeck-macos-arm64/*.dmg dist/snippetdeck-macos-arm64/SnippetDeck_0.1.0_arm64.dmg
-          mv dist/snippetdeck-macos-intel/*.dmg dist/snippetdeck-macos-intel/SnippetDeck_0.1.0_intel.dmg
-          gh release create desktop-v0.1.0 dist/snippetdeck-linux-x11/*.deb dist/snippetdeck-windows/*.msi dist/snippetdeck-macos-arm64/*.dmg dist/snippetdeck-macos-intel/*.dmg --prerelease --target "${{ github.sha }}" --title "SnippetDeck Desktop 0.1.0" --notes "Desktop preview for Windows, Linux X11 and macOS. Local snippets, compatible Android backups, no automatic sync. macOS is unsigned and requires manual Gatekeeper approval."

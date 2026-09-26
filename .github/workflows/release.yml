@@ -1,18 +1,43 @@
-name: Release APK
+name: Release SnippetDeck
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag, for example v1.5.0
+        description: Release tag, for example v1.6.0
         required: true
         type: string
 
 jobs:
-  release:
+  validate:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check version and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$INPUT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          VERSION="${INPUT_TAG#v}"
+          test "$(python3 -c 'import json; print(json.load(open("desktop/src-tauri/tauri.conf.json"))["version"])')" = "$VERSION"
+          test "$(python3 -c 'import tomllib; print(tomllib.load(open("desktop/src-tauri/Cargo.toml", "rb"))["package"]["version"])')" = "$VERSION"
+          test "$(python3 -c 'import re; print(re.search(r"versionName\s*=\s*\"([^\"]+)\"", open("app/build.gradle.kts").read()).group(1))')" = "$VERSION"
+          if gh api "repos/${GH_REPO}/git/ref/tags/${INPUT_TAG}" > /dev/null 2>&1; then
+            echo "Release tag already exists: $INPUT_TAG" >&2
+            exit 1
+          fi
+
+  android:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -52,6 +77,7 @@ jobs:
           test -f "$APK"
           test "$(bash "$APKANALYZER" manifest application-id "$APK")" = "com.rrajath.expander"
           test "$(bash "$APKANALYZER" manifest version-name "$APK")" = "$EXPECTED_VERSION"
+          test "$(bash "$APKANALYZER" manifest version-code "$APK")" = "10600"
           "$APKSIGNER" verify --verbose "$APK"
 
           ACTUAL_SIGNER_SHA256=$("$APKSIGNER" verify --print-certs "$APK" 2>&1 | grep -oE '[[:xdigit:]]{64}' | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -d '\r\n')
@@ -62,9 +88,105 @@ jobs:
           fi
 
       - name: Prepare artifact
-        run: cp app/build/outputs/apk/release/app-release.apk snippet-deck-${{ inputs.tag }}.apk
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: cp app/build/outputs/apk/release/app-release.apk "snippet-deck-${INPUT_TAG}.apk"
 
-      - name: Create GitHub release
+      - name: Upload signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: snippetdeck-android
+          path: snippet-deck-${{ inputs.tag }}.apk
+          if-no-files-found: error
+
+  desktop:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            bundle: deb
+            artifact: linux-x11
+          - os: windows-latest
+            bundle: msi
+            artifact: windows
+          - os: macos-latest
+            bundle: dmg
+            artifact: macos-arm64
+          - os: macos-15-intel
+            bundle: dmg
+            artifact: macos-intel
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: desktop/src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libx11-dev libxtst-dev libxdo-dev patchelf
+      - name: Build installer
+        run: npx --yes @tauri-apps/cli@2.11.5 build --bundles ${{ matrix.bundle }} --ci --no-sign -- --locked
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: snippetdeck-${{ matrix.artifact }}
+          path: desktop/src-tauri/target/release/bundle/${{ matrix.bundle }}/*
+          if-no-files-found: error
+
+  publish:
+    if: github.ref == 'refs/heads/main'
+    needs: [android, desktop]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: snippetdeck-*
+          path: dist
+      - name: Verify release assets and publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ inputs.tag }}" "snippet-deck-${{ inputs.tag }}.apk" --generate-notes --title "SnippetDeck ${{ inputs.tag }}"
+          GH_REPO: ${{ github.repository }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$INPUT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          VERSION="${INPUT_TAG#v}"
+          test "$(python3 -c 'import json; print(json.load(open("desktop/src-tauri/tauri.conf.json"))["version"])')" = "$VERSION"
+          test "$(python3 -c 'import tomllib; print(tomllib.load(open("desktop/src-tauri/Cargo.toml", "rb"))["package"]["version"])')" = "$VERSION"
+          test "$(python3 -c 'import re; print(re.search(r"versionName\s*=\s*\"([^\"]+)\"", open("app/build.gradle.kts").read()).group(1))')" = "$VERSION"
+          mkdir dist/release
+          cp "dist/snippetdeck-android/snippet-deck-${INPUT_TAG}.apk" dist/release/
+          cp "dist/snippetdeck-linux-x11/SnippetDeck_${VERSION}_amd64.deb" dist/release/
+          cp "dist/snippetdeck-windows/SnippetDeck_${VERSION}_x64_en-US.msi" dist/release/
+          cp dist/snippetdeck-macos-arm64/*.dmg "dist/release/SnippetDeck_${VERSION}_arm64.dmg"
+          cp dist/snippetdeck-macos-intel/*.dmg "dist/release/SnippetDeck_${VERSION}_intel.dmg"
+          ASSETS=(
+            "dist/release/snippet-deck-${INPUT_TAG}.apk"
+            "dist/release/SnippetDeck_${VERSION}_amd64.deb"
+            "dist/release/SnippetDeck_${VERSION}_x64_en-US.msi"
+            "dist/release/SnippetDeck_${VERSION}_arm64.dmg"
+            "dist/release/SnippetDeck_${VERSION}_intel.dmg"
+          )
+          for asset in "${ASSETS[@]}"; do test -s "$asset"; done
+          (cd dist/release && sha256sum "snippet-deck-${INPUT_TAG}.apk" "SnippetDeck_${VERSION}_amd64.deb" "SnippetDeck_${VERSION}_x64_en-US.msi" "SnippetDeck_${VERSION}_arm64.dmg" "SnippetDeck_${VERSION}_intel.dmg" > SHA256SUMS.txt)
+          test "$(wc -l < dist/release/SHA256SUMS.txt)" -eq 5
+          gh release create "$INPUT_TAG" "${ASSETS[@]}" dist/release/SHA256SUMS.txt --draft --target "$GITHUB_SHA" --title "SnippetDeck $INPUT_TAG" --generate-notes --notes "Installers for Android 13+, Windows, macOS (Apple Silicon and Intel), and Linux X11. Snippets remain local; cloud sync is not available. macOS installers are unsigned and may require Open Anyway. Linux Wayland text expansion is unavailable."
+          for attempt in 1 2 3 4 5 6; do
+            digest=$(gh api "repos/${GH_REPO}/releases/tags/${INPUT_TAG}" --jq ".assets[] | select(.name == \"snippet-deck-${INPUT_TAG}.apk\") | .digest")
+            if [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then break; fi
+            sleep 5
+          done
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          test "$(gh api "repos/${GH_REPO}/releases/tags/${INPUT_TAG}" --jq '.assets | length')" -eq 6
+          gh release edit "$INPUT_TAG" --draft=false --latest
