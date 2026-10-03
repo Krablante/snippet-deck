@@ -9,6 +9,8 @@ import com.rrajath.expander.domain.TriggerUtils
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
+import java.nio.charset.CodingErrorAction
+import java.nio.ByteBuffer
 import java.util.Base64
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
@@ -23,6 +25,21 @@ object SnippetBackupCodec {
     private const val SCHEMA_VERSION = 2
 
     private val prettyGson: Gson = GsonBuilder().setPrettyPrinting().create()
+
+    fun validateLibrary(snippets: List<Snippet>) {
+        val seen = mutableSetOf<String>()
+        for (snippet in snippets) {
+            TriggerUtils.validationError(snippet.trigger)?.let { throw BackupFormatException(it) }
+            if (snippet.expansion.isBlank()) throw BackupFormatException("Expansion cannot be empty")
+            for (trigger in TriggerUtils.allTriggers(snippet.trigger, snippet.aliases)) {
+                TriggerUtils.aliasValidationError(trigger)?.let { throw BackupFormatException(it) }
+                if (!seen.add(TriggerUtils.matchKey(trigger))) {
+                    throw BackupFormatException("Duplicate trigger or alias: $trigger")
+                }
+            }
+        }
+        encodeJson(snippets) // The stored library must remain exportable and transferable.
+    }
 
     fun encodeJson(snippets: List<Snippet>): String {
         require(snippets.size <= MAX_SNIPPETS) { "Too many snippets to export" }
@@ -63,18 +80,10 @@ object SnippetBackupCodec {
         }
 
         val now = System.currentTimeMillis()
-        val seenTriggers = mutableSetOf<String>()
         return snippetsJson.mapIndexed { index, element ->
             val item = runCatching { element.asJsonObject }
                 .getOrElse { throw BackupFormatException("Snippet ${index + 1} is invalid", it) }
             val trigger = TriggerUtils.normalize(item.string("trigger"))
-            val triggerError = TriggerUtils.validationError(trigger)
-            if (triggerError != null) {
-                throw BackupFormatException("Snippet ${index + 1}: $triggerError")
-            }
-            if (!seenTriggers.add(trigger.lowercase())) {
-                throw BackupFormatException("Duplicate trigger: $trigger")
-            }
 
             val aliases = item.get("aliases")
                 ?.takeUnless { it.isJsonNull }
@@ -88,22 +97,7 @@ object SnippetBackupCodec {
                 }
                 .orEmpty()
 
-            aliases.forEach { alias ->
-                TriggerUtils.aliasValidationError(alias)?.let { error ->
-                    throw BackupFormatException("Alias $alias: $error")
-                }
-                if (alias.equals(trigger, ignoreCase = true)) {
-                    throw BackupFormatException("Alias duplicates primary trigger: $trigger")
-                }
-                if (!seenTriggers.add(alias.lowercase())) {
-                    throw BackupFormatException("Duplicate trigger or alias: $alias")
-                }
-            }
-
             val expansion = item.string("expansion")
-            if (expansion.isBlank()) {
-                throw BackupFormatException("Snippet $trigger has empty expansion text")
-            }
 
             Snippet(
                 id = 0,
@@ -116,7 +110,7 @@ object SnippetBackupCodec {
                 createdAt = item.longOrNull("createdAt") ?: now,
                 updatedAt = item.longOrNull("updatedAt") ?: now
             )
-        }
+        }.also(::validateLibrary)
     }
 
     fun encodeText(snippets: List<Snippet>): String {
@@ -132,9 +126,13 @@ object SnippetBackupCodec {
     }
 
     fun decodeText(input: String): List<Snippet> {
+        if (input.length > MAX_BACKUP_BYTES * 2) throw BackupFormatException("Text backup is too large")
         val trimmed = input.trim()
-        val hasTextHeader = trimmed.startsWith(TEXT_HEADER) ||
-            trimmed.startsWith(LEGACY_TEXT_HEADER)
+        val header = trimmed.substringBefore('\n').trimEnd('\r')
+        val hasTextHeader = header == TEXT_HEADER || header == LEGACY_TEXT_HEADER
+        if (!hasTextHeader && header.startsWith("SNIPPETDECK_BACKUP_")) {
+            throw BackupFormatException("Unsupported text backup version")
+        }
         if (!hasTextHeader) {
             // Raw JSON remains convenient for advanced users and old file backups.
             return decodeJson(trimmed)
@@ -187,8 +185,13 @@ object SnippetBackupCodec {
                 output.write(buffer, 0, read)
             }
         }
-        return output.toString(StandardCharsets.UTF_8.name())
+        return decodeUtf8(output.toByteArray())
     }
+
+    internal fun decodeUtf8(bytes: ByteArray): String = runCatching {
+        StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString()
+    }.getOrElse { throw BackupFormatException("Backup is not UTF-8", it) }
 
     private fun requireValidSize(value: String) {
         if (value.toByteArray(StandardCharsets.UTF_8).size > MAX_BACKUP_BYTES) {

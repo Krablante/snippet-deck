@@ -1,4 +1,4 @@
-use crate::library::{Library, Snippet};
+use crate::library::{trigger_key, write_atomic, Library, Snippet};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -33,6 +33,8 @@ pub struct LocalState {
     pub file_id: Option<String>,
     #[serde(default)]
     pub last_uploaded_hash: Option<String>,
+    #[serde(default)]
+    pub seen_files: BTreeMap<String, String>,
 }
 
 pub struct Merge {
@@ -81,23 +83,7 @@ fn joined(versions: &[Version]) -> Clock {
 fn maximal(versions: Vec<Version>) -> Result<Vec<Version>, String> {
     let mut winners: Vec<Version> = Vec::new();
     for candidate in versions {
-        if candidate.clock.is_empty() || candidate.clock.values().any(|v| *v == 0) {
-            return Err("Invalid sync version".into());
-        }
-        if let Some(equal) = winners.iter().find(|v| v.clock == candidate.clock) {
-            if !same(&equal.value, &candidate.value) {
-                return Err("Inconsistent sync version".into());
-            }
-            continue;
-        }
-        if winners
-            .iter()
-            .any(|v| dominates(&v.clock, &candidate.clock))
-        {
-            continue;
-        }
-        winners.retain(|v| !dominates(&candidate.clock, &v.clock));
-        winners.push(candidate);
+        retain_version(&mut winners, candidate)?;
     }
     let mut index = 0;
     while index < winners.len() {
@@ -123,6 +109,26 @@ fn maximal(versions: Vec<Version>) -> Result<Vec<Version>, String> {
     Ok(winners)
 }
 
+fn retain_version(winners: &mut Vec<Version>, candidate: Version) -> Result<(), String> {
+    if candidate.clock.is_empty() || candidate.clock.values().any(|v| *v == 0) {
+        return Err("Invalid sync version".into());
+    }
+    if let Some(equal) = winners.iter().find(|v| v.clock == candidate.clock) {
+        if !same(&equal.value, &candidate.value) {
+            return Err("Inconsistent sync version".into());
+        }
+        return Ok(());
+    }
+    if !winners
+        .iter()
+        .any(|v| dominates(&v.clock, &candidate.clock))
+    {
+        winners.retain(|v| !dominates(&candidate.clock, &v.clock));
+        winners.push(candidate);
+    }
+    Ok(())
+}
+
 impl LocalState {
     pub fn fresh(account_id: String) -> Self {
         Self {
@@ -137,6 +143,7 @@ impl LocalState {
             baseline: Vec::new(),
             file_id: None,
             last_uploaded_hash: None,
+            seen_files: BTreeMap::new(),
         }
     }
 
@@ -158,11 +165,7 @@ impl LocalState {
         if data.len() > 12_000_000 {
             return Err("Local sync state is too large".into());
         }
-        let parent = path.parent().ok_or("Invalid sync path")?;
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        let tmp = path.with_extension("json.tmp");
-        fs::write(&tmp, data).map_err(|e| e.to_string())?;
-        fs::rename(tmp, path).map_err(|e| format!("Cannot save sync state: {e}"))
+        write_atomic(path, &data)
     }
 
     pub fn collect_changes(&mut self, library: &Library) -> Result<(), String> {
@@ -269,14 +272,23 @@ impl Replica {
         Ok(())
     }
 
-    pub fn merge(mut self, others: &[Replica], validate: bool) -> Result<Merge, String> {
+    pub fn merge(self, others: &[Replica], validate: bool) -> Result<Merge, String> {
+        self.merge_from(others.iter().cloned().map(Ok), validate)
+    }
+
+    pub fn merge_from(
+        mut self,
+        others: impl IntoIterator<Item = Result<Replica, String>>,
+        validate: bool,
+    ) -> Result<Merge, String> {
         for replica in others {
+            let replica = replica?;
             replica.validate()?;
-            for (trigger, versions) in &replica.entries {
-                self.entries
-                    .entry(trigger.clone())
-                    .or_default()
-                    .extend(versions.clone());
+            for (trigger, versions) in replica.entries {
+                let winners = self.entries.entry(trigger).or_default();
+                for version in versions {
+                    retain_version(winners, version)?;
+                }
             }
         }
         let mut conflicts = Vec::new();
@@ -289,10 +301,23 @@ impl Replica {
                 snippets.push(snippet.clone());
             }
         }
+        self.validate()?; // Do not persist a merge that this installation cannot reopen.
+        if validate && conflicts.is_empty() {
+            let mut seen = BTreeSet::new();
+            for snippet in &snippets {
+                for trigger in std::iter::once(&snippet.trigger).chain(snippet.aliases.iter()) {
+                    if !seen.insert(trigger_key(trigger)) {
+                        conflicts.push(trigger.clone());
+                    }
+                }
+            }
+            conflicts.sort();
+            conflicts.dedup();
+        }
         let library = if conflicts.is_empty() {
-            let library = Library { snippets };
+            let mut library = Library { snippets };
             if validate {
-                Library::decode(&library.encode()?)?;
+                library.validate()?;
             }
             Some(library)
         } else {
@@ -317,6 +342,26 @@ pub fn same_library(a: &Library, b: &Library) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn peer_revision_skips_unchanged_data_and_accepts_legacy_state() {
+        let mut file = crate::google::RemoteFile {
+            id: "file".into(),
+            name: "peer".into(),
+            size: 100,
+            version: Some("2".into()),
+        };
+        let seen = BTreeMap::from([("file".into(), "2".into())]);
+        assert!(!file.needs_download(&seen));
+        file.version = Some("3".into());
+        assert!(file.needs_download(&seen));
+        file.version = None;
+        assert!(file.needs_download(&seen));
+        let mut json = serde_json::to_value(LocalState::fresh("account".into())).unwrap();
+        json.as_object_mut().unwrap().remove("seenFiles");
+        let old: LocalState = serde_json::from_value(json).unwrap();
+        assert!(old.seen_files.is_empty());
+    }
 
     fn snippet(trigger: &str, expansion: &str) -> Snippet {
         Snippet {
@@ -408,9 +453,18 @@ mod tests {
         let mut state = LocalState::fresh("account".into());
         state.collect_changes(&library).unwrap();
 
-        let merged = state.replica.merge(&[], true).unwrap();
+        let merged = state
+            .replica
+            .clone()
+            .merge_from((0..10).map(|_| Ok(state.replica.clone())), true)
+            .unwrap();
 
         assert_eq!(merged.library.unwrap().snippets.len(), 10_000);
+        assert!(merged
+            .replica
+            .entries
+            .values()
+            .all(|versions| versions.len() == 1));
         assert!(serde_json::to_vec(&merged.replica).unwrap().len() < 6_000_000);
     }
 
@@ -440,6 +494,8 @@ mod tests {
             .collect_changes(&Library { snippets: vec![b] })
             .unwrap();
 
-        assert!(first.replica.merge(&[second.replica], true).is_err());
+        let merged = first.replica.merge(&[second.replica], true).unwrap();
+        assert_eq!(merged.conflicts, vec!["shared"]);
+        assert!(merged.library.is_none());
     }
 }

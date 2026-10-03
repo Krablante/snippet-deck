@@ -21,6 +21,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Check version and tag
         env:
           GH_TOKEN: ${{ github.token }}
@@ -33,6 +35,19 @@ jobs:
           test "$(python3 -c 'import json; print(json.load(open("desktop/src-tauri/tauri.conf.json"))["version"])')" = "$VERSION"
           test "$(python3 -c 'import tomllib; print(tomllib.load(open("desktop/src-tauri/Cargo.toml", "rb"))["package"]["version"])')" = "$VERSION"
           test "$(python3 -c 'import re; print(re.search(r"versionName\s*=\s*\"([^\"]+)\"", open("app/build.gradle.kts").read()).group(1))')" = "$VERSION"
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          latest = json.loads(subprocess.check_output([
+              "gh", "api", f"repos/{os.environ['GH_REPO']}/releases/latest"
+          ]))
+          tag = latest["tag_name"]
+          old = subprocess.check_output(["git", "show", f"{tag}:app/build.gradle.kts"], text=True)
+          current = open("app/build.gradle.kts").read()
+          code = lambda text: int(re.search(r"versionCode\s*=\s*(\d+)", text).group(1))
+          version = lambda text: tuple(map(int, text.removeprefix("v").split(".")))
+          if version(os.environ["INPUT_TAG"]) <= version(tag) or code(current) <= code(old):
+              raise SystemExit("Release version and Android versionCode must exceed the latest stable release")
+          PY
           if gh api "repos/${GH_REPO}/git/ref/tags/${INPUT_TAG}" > /dev/null 2>&1; then
             echo "Release tag already exists: $INPUT_TAG" >&2
             exit 1
@@ -98,7 +113,9 @@ jobs:
       - name: Decode signing key
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/snippet-deck.jks"
+        run: |
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/snippet-deck.jks"
 
       - name: Verify and build signed APK
         env:
@@ -106,7 +123,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew testDebugUnitTest lintDebug assembleRelease --stacktrace --no-daemon --max-workers=2
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebugAndroidTest assembleRelease --stacktrace --no-daemon --max-workers=2
 
       - name: Verify update compatibility
         env:
@@ -121,7 +138,8 @@ jobs:
           test -f "$APK"
           test "$(bash "$APKANALYZER" manifest application-id "$APK")" = "com.rrajath.expander"
           test "$(bash "$APKANALYZER" manifest version-name "$APK")" = "$EXPECTED_VERSION"
-          test "$(bash "$APKANALYZER" manifest version-code "$APK")" = "10805"
+          EXPECTED_CODE=$(python3 -c 'import re; print(re.search(r"versionCode\s*=\s*(\d+)", open("app/build.gradle.kts").read()).group(1))')
+          test "$(bash "$APKANALYZER" manifest version-code "$APK")" = "$EXPECTED_CODE"
           "$APKSIGNER" verify --verbose "$APK"
 
           ACTUAL_SIGNER_SHA256=$("$APKSIGNER" verify --print-certs "$APK" 2>&1 | grep -oE '[[:xdigit:]]{64}' | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -d '\r\n')
@@ -145,48 +163,11 @@ jobs:
 
   desktop:
     needs: validate
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            bundle: deb
-            artifact: linux-x11
-          - os: windows-latest
-            bundle: msi
-            artifact: windows
-          - os: macos-latest
-            bundle: dmg
-            artifact: macos-arm64
-          - os: macos-15-intel
-            bundle: dmg
-            artifact: macos-intel
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: read
-    defaults:
-      run:
-        working-directory: desktop/src-tauri
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: desktop/src-tauri
-      - name: Linux build dependencies
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libx11-dev libxtst-dev libxdo-dev patchelf
-      - name: Build installer
-        env:
-          SNIPPETDECK_OFFICIAL_BUILD: "1"
-          SNIPPETDECK_DESKTOP_OAUTH_CLIENT_SECRET: ${{ secrets.SNIPPETDECK_DESKTOP_OAUTH_CLIENT_SECRET }}
-        run: npx --yes @tauri-apps/cli@2.11.5 build --bundles ${{ matrix.bundle }} --ci --no-sign -- --locked
-      - name: Upload installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: snippetdeck-${{ matrix.artifact }}
-          path: desktop/src-tauri/target/release/bundle/${{ matrix.bundle }}/*
-          if-no-files-found: error
+    uses: ./.github/workflows/desktop.yml
+    with:
+      official_build: true
+    secrets:
+      SNIPPETDECK_DESKTOP_OAUTH_CLIENT_SECRET: ${{ secrets.SNIPPETDECK_DESKTOP_OAUTH_CLIENT_SECRET }}
 
   publish:
     if: github.ref == 'refs/heads/main'
@@ -229,7 +210,7 @@ jobs:
           for asset in "${ASSETS[@]}"; do test -s "$asset"; done
           (cd dist/release && sha256sum "snippet-deck-${INPUT_TAG}.apk" "SnippetDeck_${VERSION}_amd64.deb" "SnippetDeck_${VERSION}_x64_en-US.msi" "SnippetDeck_${VERSION}_arm64.dmg" "SnippetDeck_${VERSION}_intel.dmg" > SHA256SUMS.txt)
           test "$(wc -l < dist/release/SHA256SUMS.txt)" -eq 5
-          gh release create "$INPUT_TAG" "${ASSETS[@]}" dist/release/SHA256SUMS.txt --draft --target "$GITHUB_SHA" --title "SnippetDeck $INPUT_TAG" --generate-notes --notes "Android search and add controls now sit directly above the open keyboard while the toolbar stays below the status bar. Glass stays enabled during battery saver; Reduce transparency and system high contrast still use solid controls. Existing snippets and backups remain compatible. Desktop installers remain unsigned; macOS may require Open Anyway. Linux Wayland text expansion is unavailable."
+          gh release create "$INPUT_TAG" "${ASSETS[@]}" dist/release/SHA256SUMS.txt --draft --target "$GITHUB_SHA" --title "SnippetDeck $INPUT_TAG" --generate-notes --notes "Install the APK on Android, the MSI on Windows, the matching DMG on macOS, or the DEB on Linux. Export a backup before updating. Desktop installers remain unsigned; macOS may require Open Anyway. Linux Wayland supports the editor; text expansion requires X11."
           # Drafts are absent from the releases/tags endpoint until published.
           RELEASE_ID=$(gh api "repos/${GH_REPO}/releases" --jq ".[] | select(.tag_name == \"${INPUT_TAG}\" and .draft == true) | .id")
           test -n "$RELEASE_ID"

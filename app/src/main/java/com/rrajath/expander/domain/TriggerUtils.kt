@@ -28,7 +28,7 @@ object TriggerUtils {
     private fun exactValidationError(trigger: String, allowHelp: Boolean): String? {
         return when {
             trigger.isBlank() -> "Trigger cannot be empty"
-            trigger.length > MAX_TRIGGER_LENGTH -> "Trigger must be at most $MAX_TRIGGER_LENGTH characters"
+            trigger.codePointCount(0, trigger.length) > MAX_TRIGGER_LENGTH -> "Trigger must be at most $MAX_TRIGGER_LENGTH characters"
             trigger.any(Char::isWhitespace) -> "Trigger cannot contain spaces"
             !allowHelp && trigger.equals(HELP_TRIGGER, ignoreCase = true) ->
                 "$HELP_TRIGGER is generated automatically"
@@ -41,7 +41,7 @@ object TriggerUtils {
         .asSequence()
         .map(::normalizeAlias)
         .filter(String::isNotBlank)
-        .distinctBy(String::lowercase)
+        .distinctBy(::matchKey)
         .toList()
 
     fun aliasesValidationError(raw: String, primaryTrigger: String): String? {
@@ -67,7 +67,7 @@ object TriggerUtils {
         aliases: List<String>,
         reservedTriggers: Set<String>
     ): String? = allTriggers(primaryTrigger, aliases)
-        .firstOrNull { it.lowercase() in reservedTriggers }
+        .firstOrNull { matchKey(it) in reservedTriggers }
 
     fun matches(
         candidate: String,
@@ -76,10 +76,14 @@ object TriggerUtils {
     ): Boolean = allTriggers(primaryTrigger, aliases)
         .any { it.equals(candidate, ignoreCase = true) }
 
-    // String.equals(ignoreCase = true) compares Unicode characters after simple case folding.
-    // A full String.lowercase() can expand one character into several and change that match.
+    // Simple folding preserves one Unicode code point; full lowercase can expand it.
     fun matchKey(value: String): String = buildString(value.length) {
-        value.forEach { append(it.uppercaseChar().lowercaseChar()) }
+        var index = 0
+        while (index < value.length) {
+            val codePoint = value.codePointAt(index)
+            appendCodePoint(Character.toLowerCase(Character.toUpperCase(codePoint)))
+            index += Character.charCount(codePoint)
+        }
     }
 
     fun allTriggers(primaryTrigger: String, aliases: List<String>): List<String> =

@@ -2,7 +2,9 @@
 <full-backup-content>
     <!-- Include shared preferences for backup -->
     <include domain="sharedpref" path="expander_prefs.xml"/>
+    <include domain="sharedpref" path="theme_prefs.xml"/>
 
     <!-- Include database for snippets backup -->
-    <include domain="database" path="snippet_database"/>
+    <!-- Include Room's database and its journal sidecars. Sync metadata stays in noBackupFilesDir. -->
+    <include domain="database" path="."/>
 </full-backup-content>

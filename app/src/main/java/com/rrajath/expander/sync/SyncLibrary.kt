@@ -2,6 +2,7 @@ package com.rrajath.expander.sync
 
 import com.rrajath.expander.data.Snippet
 import com.rrajath.expander.util.SnippetBackupCodec
+import com.rrajath.expander.domain.TriggerUtils
 import java.util.Locale
 import java.util.UUID
 
@@ -50,7 +51,11 @@ internal data class SyncLocalState(
     val baseline: List<SyncSnippet>,
     val fileId: String? = null,
     val lastUploadedHash: String? = null,
+    val seenFiles: Map<String, String>? = null,
 )
+
+internal class PendingSyncConflict(val triggers: List<String>) :
+    IllegalStateException("Resolve conflicting edits before syncing")
 
 internal data class SyncMerge(
     val replica: SyncReplica,
@@ -75,7 +80,7 @@ internal object SyncLibrary {
             if (current?.sameContent(before[key]) == true ||
                 (current == null && before[key] == null)) continue
             // An edit during an unresolved conflict must never disappear from the baseline.
-            require(entries[key].orEmpty().size <= 1) { "Resolve the conflict for $key before syncing" }
+            if (entries[key].orEmpty().size > 1) throw PendingSyncConflict(listOf(key))
             val known = entries[key].orEmpty().flatMap { it.clock.entries }
                 .groupBy({ it.key }, { it.value }).mapValues { it.value.max() }
                 .toMutableMap()
@@ -90,21 +95,39 @@ internal object SyncLibrary {
     }
 
     fun merge(own: SyncReplica, others: List<SyncReplica>, validate: Boolean = true): SyncMerge {
-        val all = (listOf(own) + others).flatMap { it.entries.entries }
-            .groupBy({ it.key }, { it.value })
-        val entries = all.mapValues { (_, groups) ->
-            val versions = groups.flatten()
-            require(versions.isNotEmpty()) { "Empty sync record" }
-            maximal(versions)
+        return merge(own, others.asSequence(), validate)
+    }
+
+    fun merge(own: SyncReplica, others: Sequence<SyncReplica>, validate: Boolean = true): SyncMerge {
+        val pending = mutableMapOf<String, MutableList<SyncVersion>>()
+        for (replica in sequenceOf(own) + others) {
+            for ((key, versions) in replica.entries) {
+                require(versions.isNotEmpty()) { "Empty sync record" }
+                val winners = pending.getOrPut(key) { mutableListOf() }
+                versions.forEach { retainVersion(winners, it) }
+            }
         }
-        val conflicts = entries.filterValues { it.size != 1 }.keys.sorted()
-        val snippets = if (conflicts.isEmpty()) {
+        val entries = pending.mapValues { maximal(it.value) }
+        require(entries.size <= 20_000 && entries.values.all { versions ->
+            versions.size <= 50 && versions.all { it.clock.size <= 50 }
+        }) { "Merged sync history exceeds the device limits" }
+        var conflicts = entries.filterValues { it.size != 1 }.keys.sorted()
+        var snippets = if (conflicts.isEmpty()) {
             entries.values.mapNotNull { it.single().value }.map(SyncSnippet::asSnippet)
                 .sortedBy { syncKey(it.trigger) }
         } else null
         if (snippets != null && validate) {
+            val seen = mutableSetOf<String>()
+            val collisions = snippets.flatMap { TriggerUtils.allTriggers(it.trigger, it.aliases) }
+                .filterNot { seen.add(TriggerUtils.matchKey(it)) }.distinct().sorted()
+            if (collisions.isNotEmpty()) {
+                conflicts = collisions
+                snippets = null
+            }
+        }
+        if (snippets != null && validate) {
             // The existing backup decoder is the single validator for trigger/alias collisions.
-            SnippetBackupCodec.decodeJson(SnippetBackupCodec.encodeJson(snippets))
+            SnippetBackupCodec.validateLibrary(snippets)
         }
         return SyncMerge(own.copy(entries = entries), snippets, conflicts)
     }
@@ -130,15 +153,7 @@ internal object SyncLibrary {
     private fun maximal(versions: List<SyncVersion>): List<SyncVersion> {
         val winners = mutableListOf<SyncVersion>()
         for (candidate in versions) {
-            require(candidate.clock.isNotEmpty()) { "Missing sync version" }
-            val equal = winners.find { it.clock == candidate.clock }
-            if (equal != null) {
-                require(sameValue(equal.value, candidate.value)) { "Inconsistent sync version" }
-                continue
-            }
-            if (winners.any { dominates(it.clock, candidate.clock) }) continue
-            winners.removeAll { dominates(candidate.clock, it.clock) }
-            winners += candidate
+            retainVersion(winners, candidate)
         }
         // Identical concurrent edits are one value with both clocks observed.
         var index = 0
@@ -163,6 +178,18 @@ internal object SyncLibrary {
             index = 0
         }
         return winners
+    }
+
+    private fun retainVersion(winners: MutableList<SyncVersion>, candidate: SyncVersion) {
+        require(candidate.clock.isNotEmpty() && candidate.clock.values.all { it > 0 }) { "Missing sync version" }
+        val equal = winners.find { it.clock == candidate.clock }
+        if (equal != null) {
+            require(sameValue(equal.value, candidate.value)) { "Inconsistent sync version" }
+            return
+        }
+        if (winners.any { dominates(it.clock, candidate.clock) }) return
+        winners.removeAll { dominates(candidate.clock, it.clock) }
+        winners += candidate
     }
 
     private fun sameValue(a: SyncSnippet?, b: SyncSnippet?): Boolean =

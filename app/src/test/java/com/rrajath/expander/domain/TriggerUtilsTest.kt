@@ -29,6 +29,7 @@ class TriggerUtilsTest {
         assertTrue(TriggerUtils.matches("ALIAS", "!main", listOf("alias")))
         assertEquals(TriggerUtils.matchKey("!İ"), TriggerUtils.matchKey("!i"))
         assertEquals(TriggerUtils.matchKey("КК"), TriggerUtils.matchKey("кк"))
+        assertEquals(TriggerUtils.matchKey("\uD801\uDC00"), TriggerUtils.matchKey("\uD801\uDC28"))
     }
 
     @Test
@@ -46,5 +47,11 @@ class TriggerUtilsTest {
     @Test
     fun `plain alias never receives exclamation prefix`() {
         assertEquals(listOf("кк"), TriggerUtils.parseAliases("кк"))
+    }
+
+    @Test
+    fun `trigger limit counts unicode characters rather than surrogate halves`() {
+        assertNull(TriggerUtils.validationError("!" + "😀".repeat(39)))
+        assertEquals("Trigger must be at most 40 characters", TriggerUtils.validationError("!" + "😀".repeat(40)))
     }
 }

@@ -8,10 +8,10 @@ import com.rrajath.expander.data.Snippet
 import com.rrajath.expander.data.SnippetRepository
 import com.rrajath.expander.domain.TriggerUtils
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 
-@OptIn(ExperimentalCoroutinesApi::class)
 class SnippetViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = SnippetRepository(
@@ -20,6 +20,20 @@ class SnippetViewModel(application: Application) : AndroidViewModel(application)
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+    private val _errors = MutableSharedFlow<String>()
+    val errors = _errors.asSharedFlow()
+
+    private fun change(action: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                action()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _errors.emit(error.message ?: "Cannot save library")
+            }
+        }
+    }
 
     val allSnippets: StateFlow<List<Snippet>> = repository.getAllSnippets()
         .stateIn(
@@ -28,14 +42,14 @@ class SnippetViewModel(application: Application) : AndroidViewModel(application)
             initialValue = emptyList()
         )
 
-    val snippets: StateFlow<List<Snippet>> = _searchQuery
-        .flatMapLatest { query ->
-            if (query.isEmpty()) {
-                repository.getAllSnippets()
-            } else {
-                repository.searchSnippets(query)
-            }
+    val snippets: StateFlow<List<Snippet>> = combine(allSnippets, _searchQuery) { library, query ->
+        if (query.isEmpty()) library else library.filter { snippet ->
+            snippet.trigger.contains(query, ignoreCase = true) ||
+                snippet.expansion.contains(query, ignoreCase = true) ||
+                snippet.aliases.any { it.contains(query, ignoreCase = true) }
         }
+    }
+        .flowOn(Dispatchers.Default)
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -52,8 +66,8 @@ class SnippetViewModel(application: Application) : AndroidViewModel(application)
         aliases: List<String> = emptyList(),
         onComplete: (Long) -> Unit = {}
     ) {
-        viewModelScope.launch {
-            val snippet = repository.saveByTrigger(
+        change {
+            val snippet = repository.create(
                 trigger = TriggerUtils.normalize(trigger),
                 expansion = expansion,
                 aliases = aliases
@@ -62,44 +76,44 @@ class SnippetViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun updateSnippet(snippet: Snippet, onComplete: () -> Unit = {}) {
-        viewModelScope.launch {
+    fun updateSnippet(snippet: Snippet, expected: Snippet, onComplete: () -> Unit = {}) {
+        change {
             val updatedSnippet = snippet.copy(
                 trigger = TriggerUtils.normalize(snippet.trigger),
                 updatedAt = System.currentTimeMillis()
             )
-            repository.update(updatedSnippet)
+            repository.update(updatedSnippet, expected)
             onComplete()
         }
     }
 
     fun deleteSnippet(snippet: Snippet, onComplete: () -> Unit = {}) {
-        viewModelScope.launch {
+        change {
             repository.delete(snippet)
             onComplete()
         }
     }
 
     fun getSnippetById(id: Long, onResult: (Snippet?) -> Unit) {
-        viewModelScope.launch {
+        change {
             val snippet = repository.getSnippetById(id)
             onResult(snippet)
         }
     }
 
     fun toggleSnippetEnabled(snippet: Snippet, onComplete: () -> Unit = {}) {
-        viewModelScope.launch {
+        change {
             val updated = snippet.copy(
                 isEnabled = !snippet.isEnabled,
                 updatedAt = System.currentTimeMillis()
             )
-            repository.update(updated)
+            repository.update(updated, snippet)
             onComplete()
         }
     }
 
     fun replaceAllSnippets(snippets: List<Snippet>, onComplete: () -> Unit = {}) {
-        viewModelScope.launch {
+        change {
             repository.replaceAll(snippets)
             _searchQuery.value = ""
             onComplete()

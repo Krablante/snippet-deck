@@ -9,7 +9,7 @@ SnippetDeck favors a small local-first architecture, predictable behavior, and p
 The design prioritizes:
 
 - Reliable expansion at the current cursor position.
-- Explicit, reversible user actions.
+- Explicit changes and recovery through portable backups.
 - Stable installed-app and data compatibility.
 - Testable backup and migration formats.
 - Minimal dependencies and operational surface area.
@@ -27,6 +27,16 @@ Desktop: Tauri editor → Rust library → local JSON → keyboard trigger index
 
 The two apps share formats, not runtime code. Android storage and system permissions differ from desktop, so a shared implementation layer would couple decisions that can change independently. On either platform the input agent reads the local library; network work does not belong on the typing path.
 
+| Location | Responsibility |
+| --- | --- |
+| `app/src/main/java/.../data`, `domain`, `service` | Room storage, trigger rules and Android field editing |
+| `app/src/main/java/.../sync`, `update`, `util` | Drive exchange, verified updates and portable backups |
+| `app/src/main/java/.../ui` | Compose editor and platform actions |
+| `desktop/src-tauri/src` | Rust library, keyboard agent, Drive, updates and Tauri command orchestration |
+| `desktop/ui` | Static editor; no frontend package manager |
+| `.github/workflows` | Android verification, desktop packages and coordinated release |
+| `docs`, `design` | Human documentation, public site and visual assets |
+
 ## Text expansion
 
 `TextExpansionService` observes editable text through Android accessibility events. It builds a lookup index when the enabled snippet list changes, so a space typed into another app does not scan the whole library. When a trigger appears immediately before the cursor and the user enters a delimiter, the service:
@@ -38,15 +48,17 @@ The two apps share formats, not runtime code. Android storage and system permiss
 
 Nodes that do not expose selection information use an end-of-field fallback. The service never submits the target field.
 
+Trigger scanning stops after 40 Unicode code points. Password fields, non-editable nodes and the app's own editor are skipped; focus and window changes invalidate undo history. The trigger index and virtual help are built on a background dispatcher, then swapped into the service's main-thread state. Placeholder resolution makes one pass over the expansion and caches each date pattern for that insertion.
+
 The accessibility service waits for device unlock before opening its credential-protected snippet library. The first accessibility event after unlock starts its library observation if the service was created during boot.
 
 Immediate Backspace restores the typed trigger at its original cursor location where the target node supports the required editing actions. Dynamic placeholders are resolved immediately before insertion, and virtual `!help` is generated from enabled snippets.
 
 The desktop Rust agent observes keyboard events through `rdev` and replaces the immediately preceding typed trigger through `enigo`. It keeps no field text on disk. The editor is a Tauri WebView that can close while the agent stays in the tray, releasing the WebView process when it is not needed. Single-line text is inserted through native input; Linux X11 uses the fast `libxdo` backend. Multiline text uses a paste operation so a simulated Enter cannot submit the target field. The app temporarily owns the clipboard and restores its previous supported content after paste, unless the user copied something else meanwhile. The agent does not inspect the entire target field: mouse clicks, navigation, or shortcuts clear its short in-memory trigger buffer. It works on Windows and macOS and on Linux X11; Wayland text expansion is deliberately disabled. The desktop engine maintains a lookup table for triggers and aliases and rebuilds it only after the library changes.
 
-## Data layer
+## Data and operation cost
 
-`SnippetDao` is the Room persistence boundary. `SnippetRepository` serves the Compose editor, accessibility cache, and restore flow.
+`SnippetDao` is the Room persistence boundary. `SnippetRepository` serves the Compose editor, accessibility cache, and restore flow. A save validates uniqueness and backup limits inside the write transaction. Editing and deletion compare the row with the version the user opened, so a sync or another save cannot be silently overwritten. The desktop editor sends its original snippet to Rust for the same comparison.
 
 Room schema v2 stores aliases as JSON in the existing `snippets` table. Migration 1→2 initializes legacy rows with an empty alias list and preserves every existing snippet.
 
@@ -56,19 +68,25 @@ Each snippet has one primary trigger and zero or more aliases:
 - Aliases are trimmed but otherwise preserved exactly.
 - Primary triggers and aliases are globally unique, case-insensitively.
 
-A complete restore validates the input and then replaces the library in one Room transaction. Fresh local IDs are assigned during import.
+A complete restore validates the input and then replaces the library in one Room transaction. Fresh local IDs are assigned during import. Sync keeps the IDs of retained snippets and writes only additions, changes and deletions; an unrelated remote change therefore leaves an open editor's row intact. Android's system backup includes the Room database with journal files and appearance preferences; sync metadata stays in `noBackupFilesDir`, so a restored installation gets its own sync identity.
 
-Desktop keeps a separate local JSON file under the OS application-data directory. Saves write a temporary file in the same directory and rename it over the old copy. The file uses the Android backup envelope with `format=snippetdeck-backup` and `schemaVersion=2`, so export and import are reversible across platforms. Sync has its own versioned format and local metadata file; backup imports still replace the full library after confirmation. Avoid pointing two live desktop installations at the same working file.
+Desktop keeps a separate local JSON file under the OS application-data directory. Library and sync saves share a temporary-file replacement that flushes data before rename and creates private files on Unix. The library uses the Android backup envelope with `format=snippetdeck-backup` and `schemaVersion=2`, so export and import are reversible across platforms. Sync has its own versioned format and local metadata file; backup imports still replace the full library after confirmation. Avoid pointing two live desktop installations at the same working file.
 
-Libraries allow up to 10,000 snippets and 2 MB of backup JSON. Saves serialize the full desktop library, while the typing index is rebuilt only after an edit. Google Drive sync lists at most 50 device files and transfers their bounded replicas when the app opens, saves, or the user requests sync. This is a deliberate whole-library exchange at the project's current limits; if those limits change, measure network transfer and merge cost before adding caching or a server.
+Libraries allow up to 10,000 snippets and 2 MB of backup JSON. Saves serialize the full desktop library, while the typing index is rebuilt only after an edit. Google Drive sync lists at most 50 device files when the app opens, saves, or the user requests sync. Local metadata remembers each peer file's Drive `version`; unchanged files are already represented in the local merged replica and are not downloaded again. A missing revision always forces a read, and choosing another library reads it explicitly. Changed files still exchange full bounded replicas; higher limits would need fresh network and merge measurements.
 
-## Compose UI
+Sync reads one remote file at a time and retains only versions that are distinct and not superseded. Identical copies and older revisions are discarded during ingestion; concurrent equal values are coalesced after the full exchange. Memory follows the surviving library and unresolved versions rather than every device's full copy. Deletion history is capped at 20,000 record keys; an over-limit merge fails before replacing local state.
+
+## Interfaces
 
 The Compose interface provides snippet editing, search, enabled state, accessibility onboarding, theme selection, backup and transfer, Google Drive connection, and manual update checks. Import always previews the source and snippet count and warns that the current library will be replaced.
 
-Chalk, Ink, and Parchment use deterministic Material 3 schemes. Their stored values remain `white`, `black`, and `sepia` so existing preferences still load; legacy Light/Dark/System values migrate to the nearest option. Dynamic wallpaper colors are disabled to keep contrast predictable. The continuous snippet list runs beneath a compact toolbar and bottom search. Haze 2 captures the list once for three glass blocks and renders depth blur, edge refraction, and specular lighting behind sharp controls. A background color in each material obscures the original unblurred pixels. Capture is skipped in favor of solid controls for reduced transparency or system high contrast, independently of battery saver. The bottom controls follow the resized window when the keyboard opens. Forms remain opaque and placeholders open on demand.
+Chalk, Ink, and Parchment use deterministic Material 3 schemes. Android stores `WHITE`, `BLACK`, and `SEPIA`, while the desktop editor stores `white`, `black`, and `sepia`; legacy Android `LIGHT`/`DARK`/`SYSTEM` values migrate to the nearest option. Dynamic wallpaper colors are disabled to keep contrast predictable. The continuous snippet list runs beneath a compact toolbar and bottom search. Haze 2 captures the list once for three glass blocks and renders depth blur, edge refraction, and specular lighting behind sharp controls. A background color in each material obscures the original unblurred pixels. Capture is skipped in favor of solid controls for reduced transparency or system high contrast, independently of battery saver. The bottom controls follow the resized window when the keyboard opens. Forms remain opaque and placeholders open on demand.
 
 UI state is owned by view models and repositories rather than composables. Platform actions such as document selection and clipboard access remain at the UI boundary.
+
+The editor destination keeps its draft and original row in a small view model, so activity recreation preserves both the entered text and the version checked on save. Drafts stay in memory while that destination exists; they are not part of backups or promised across process termination.
+
+Android observes one editor library and filters it in memory on a background dispatcher. Search treats `%` and `_` literally and supports Unicode case matching. Both editors bound row previews to 160 characters instead of feeding a full expansion into each row's text layout.
 
 Desktop uses a small static web interface with the same three palettes. On a narrow window the library and full-screen editor alternate; on a wide window they sit side by side. Search and menus use a translucent control layer with an opaque fallback for reduced transparency. The Rust side owns persistence, validation, file dialogs, and expansion; the WebView has no direct filesystem or network access. At most 80 library rows are rendered at a time until the user requests more.
 
@@ -88,7 +106,7 @@ The desktop import accepts Android's JSON envelope, raw-array and legacy backups
 
 ## Optional Google Drive sync
 
-`SyncLibrary` on Android and `sync.rs` on desktop implement the same `snippetdeck-sync` v1 format. The key of a sync record is its case-insensitive primary trigger; changing a trigger is a deletion and a creation. Each record holds its snippet or a deletion marker and a small version clock. An installation stores a local baseline outside the Android backup area or beside the desktop library. Local edits produce a new version relative to that baseline. Independent changes merge; concurrent different values of the same trigger remain unresolved until the user explicitly chooses a library. The existing backup validator rejects alias collisions before applying a merge. An Android Room transaction refuses to replace snippets if they changed during the network request; desktop checks its current library under a lock before saving.
+`SyncLibrary` on Android and `sync.rs` on desktop implement the same `snippetdeck-sync` v1 format. The key of a sync record is its lowercased primary trigger; changing a trigger is a deletion and a creation. Each record holds its snippet or a deletion marker and a small version clock. An installation stores a local baseline outside the Android backup area or beside the desktop library. Local edits produce a new version relative to that baseline. Independent changes merge; concurrent different values of the same trigger remain unresolved until the user explicitly chooses a library. Trigger and alias collisions also use that conflict flow. Shared in-memory validation checks the resulting library without a JSON encode/decode round trip. An Android Room transaction refuses to replace snippets if they changed during the network request; desktop checks its current library under a lock before saving.
 
 Every installation owns a separate file in the account's hidden Drive `appDataFolder`. No device overwrites another device's file. This avoids an unsafe last-writer-wins update when two devices sync at once. A conflicted merge stays in local sync metadata and is not uploaded as the device's chosen library. Selecting **Use this device** records a version that incorporates all versions the device has seen; **Use other device** accepts the one other device's resolved copy. Deletion markers prevent offline copies from reviving deleted snippets. Files remain bounded by the app's size limits and are transferred only on a foreground app open, a local edit, or a manual action; there is no background polling or server.
 

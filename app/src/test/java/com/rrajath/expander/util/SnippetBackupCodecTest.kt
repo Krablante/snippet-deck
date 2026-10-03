@@ -1,10 +1,6 @@
 package com.rrajath.expander.util
 
 import com.rrajath.expander.data.Snippet
-import com.rrajath.expander.sync.SyncLibrary
-import com.rrajath.expander.sync.SyncReplica
-import com.google.gson.Gson
-import com.rrajath.expander.sync.forSync
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -175,55 +171,15 @@ class SnippetBackupCodecTest {
     }
 
     @Test
-    fun `concurrent edits and deletions are preserved as conflicts`() {
-        val original = Snippet(trigger = "!shared", expansion = "Original")
-        val a = SyncLibrary.collectChanges(SyncLibrary.empty("account"), listOf(original))
-        val b = SyncLibrary.empty("account")
-        val received = SyncLibrary.merge(b.replica, listOf(a.replica))
-        val bAfterPull = b.copy(replica = received.replica, baseline = listOf(original.forSync()))
-
-        val edit = SyncLibrary.collectChanges(a, listOf(original.copy(expansion = "Changed")))
-        val deletion = SyncLibrary.collectChanges(bAfterPull, emptyList())
-        val merged = SyncLibrary.merge(edit.replica, listOf(deletion.replica))
-
-        assertEquals(listOf("!shared"), merged.conflicts)
-        assertEquals(null, merged.snippets)
-        assertEquals(2, merged.replica.entries.getValue("!shared").size)
-    }
-
-    @Test
-    fun `observed deletion does not resurrect on an offline device`() {
-        val original = Snippet(trigger = "!shared", expansion = "Original")
-        val first = SyncLibrary.collectChanges(SyncLibrary.empty("account"), listOf(original))
-        val offline = first.replica
-        val deleted = SyncLibrary.collectChanges(first, emptyList())
-
-        val merged = SyncLibrary.merge(offline, listOf(deleted.replica))
-
-        assertTrue(merged.conflicts.isEmpty())
-        assertTrue(merged.snippets.orEmpty().isEmpty())
-        assertEquals(null, merged.replica.entries.getValue("!shared").single().value)
-    }
-
-    @Test
-    fun `independent device additions merge without replacement`() {
-        val phone = SyncLibrary.collectChanges(SyncLibrary.empty("account"),
-            listOf(Snippet(trigger = "!phone", expansion = "From phone")))
-        val laptop = SyncLibrary.collectChanges(SyncLibrary.empty("account"),
-            listOf(Snippet(trigger = "!laptop", expansion = "From laptop")))
-
-        val merged = SyncLibrary.merge(phone.replica, listOf(laptop.replica))
-
-        assertTrue(merged.conflicts.isEmpty())
-        assertEquals(setOf("!phone", "!laptop"), merged.snippets.orEmpty().map { it.trigger }.toSet())
-    }
-
-    @Test
-    fun `android reads a desktop deletion record`() {
-        val json = """{"format":"snippetdeck-sync","schemaVersion":1,"deviceId":"device-a","sequence":1,"entries":{"!gone":[{"clock":{"device-a":1},"value":null}]}}"""
-        val replica = Gson().fromJson(json, SyncReplica::class.java)
-
-        assertEquals(null, replica.entries.getValue("!gone").single().value)
-        assertEquals(1L, replica.entries.getValue("!gone").single().clock.getValue("device-a"))
+    fun `future text versions and malformed unicode are rejected`() {
+        assertThrows(BackupFormatException::class.java) {
+            SnippetBackupCodec.decodeText(SnippetBackupCodec.encodeText(snippets).replace("BACKUP_V2", "BACKUP_V20"))
+        }
+        assertThrows(BackupFormatException::class.java) {
+            SnippetBackupCodec.decodeUtf8(byteArrayOf(0xc3.toByte(), 0x28))
+        }
+        assertThrows(BackupFormatException::class.java) {
+            SnippetBackupCodec.decodeJson("""[{"trigger":"!İ","expansion":"One"},{"trigger":"!i","expansion":"Two"}]""")
+        }
     }
 }

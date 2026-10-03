@@ -2,7 +2,12 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use chrono::Utc;
 use flate2::read::GzDecoder;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, fs, io::Read, path::Path};
+use std::{
+    collections::HashSet,
+    fs,
+    io::{Read, Write},
+    path::Path,
+};
 
 const MAX_BYTES: usize = 2_000_000;
 const MAX_SNIPPETS: usize = 10_000;
@@ -60,9 +65,14 @@ impl Library {
         if input.len() > MAX_BYTES * 2 {
             return Err("Backup is too large".into());
         }
-        let json = if input.trim().starts_with("SNIPPETDECK_BACKUP_V1")
-            || input.trim().starts_with("SNIPPETDECK_BACKUP_V2")
+        let input = input.trim();
+        let header = input.lines().next().unwrap_or("");
+        if header.starts_with("SNIPPETDECK_BACKUP_")
+            && !matches!(header, "SNIPPETDECK_BACKUP_V1" | "SNIPPETDECK_BACKUP_V2")
         {
+            return Err("Unsupported text backup version".into());
+        }
+        let json = if matches!(header, "SNIPPETDECK_BACKUP_V1" | "SNIPPETDECK_BACKUP_V2") {
             let (_, encoded) = input
                 .trim()
                 .split_once('\n')
@@ -133,11 +143,7 @@ impl Library {
 
     pub fn save(&self, path: &Path) -> Result<(), String> {
         let data = self.encode()?;
-        let parent = path.parent().ok_or("Invalid library path")?;
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        let tmp = path.with_extension("json.tmp");
-        fs::write(&tmp, data).map_err(|e| e.to_string())?;
-        fs::rename(&tmp, path).map_err(|e| format!("Cannot save library: {e}"))
+        write_atomic(path, data.as_bytes())
     }
 
     pub fn put(&mut self, previous: Option<&str>, mut snippet: Snippet) -> Result<(), String> {
@@ -151,7 +157,7 @@ impl Library {
         let current = previous.and_then(|t| {
             self.snippets
                 .iter()
-                .position(|s| s.trigger.eq_ignore_ascii_case(t))
+                .position(|s| trigger_key(&s.trigger) == trigger_key(t))
         });
         if previous.is_some() && current.is_none() {
             return Err("Snippet no longer exists".into());
@@ -172,21 +178,27 @@ impl Library {
 
     pub fn remove(&mut self, trigger: &str) -> Result<(), String> {
         let len = self.snippets.len();
-        self.snippets
-            .retain(|s| !s.trigger.eq_ignore_ascii_case(trigger));
+        let key = trigger_key(trigger);
+        self.snippets.retain(|s| trigger_key(&s.trigger) != key);
         if self.snippets.len() == len {
             return Err("Snippet no longer exists".into());
         }
         Ok(())
     }
 
-    fn validate(&mut self) -> Result<(), String> {
+    pub fn validate(&mut self) -> Result<(), String> {
         if self.snippets.len() > MAX_SNIPPETS {
             return Err("Too many snippets".into());
         }
         let mut seen = HashSet::new();
         for snippet in &mut self.snippets {
             snippet.trigger = normalize_primary(&snippet.trigger);
+            for alias in &mut snippet.aliases {
+                let trimmed = alias.trim();
+                if trimmed.len() != alias.len() {
+                    *alias = trimmed.to_owned();
+                }
+            }
             if snippet.expansion.trim().is_empty() {
                 return Err("Expansion cannot be empty".into());
             }
@@ -206,7 +218,7 @@ impl Library {
                 if trigger.eq_ignore_ascii_case("!help") {
                     return Err("!help is reserved".into());
                 }
-                if !seen.insert(trigger.to_lowercase()) {
+                if !seen.insert(trigger_key(trigger)) {
                     return Err(format!("Duplicate trigger: {trigger}"));
                 }
             }
@@ -216,11 +228,88 @@ impl Library {
     }
 }
 
+// Simple Unicode folding agrees with Android's case-insensitive trigger matcher.
+// Expanding mappings (e.g. ß → SS) must not change the number of typed characters.
+pub fn trigger_key(value: &str) -> String {
+    value
+        .chars()
+        .map(|c| {
+            let mut upper = c.to_uppercase();
+            let first = upper.next().unwrap();
+            let upper = if upper.next().is_none() { first } else { c };
+            upper.to_lowercase().next().unwrap()
+        })
+        .collect()
+}
+
+// Library and sync state use the same durable replacement, including private Unix files.
+pub fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {
+    let parent = path.parent().ok_or("Invalid data path")?;
+    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    let tmp = path.with_extension("json.tmp");
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(&tmp).map_err(|e| e.to_string())?;
+    file.write_all(data)
+        .and_then(|()| file.sync_all())
+        .map_err(|e| e.to_string())?;
+    drop(file);
+    fs::rename(&tmp, path).map_err(|e| format!("Cannot save data: {e}"))
+}
+
 fn normalize_primary(value: &str) -> String {
     let value = value.trim();
     if value.is_empty() || value.starts_with('!') {
         value.to_owned()
     } else {
         format!("!{value}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unicode_triggers_share_matching_validation_edit_and_delete() {
+        assert_eq!(trigger_key("!İΣК"), trigger_key("!iςк"));
+        assert_ne!(trigger_key("ß"), trigger_key("ss"));
+        let mut library =
+            Library::decode(r#"[{"trigger":"!Привет","expansion":"Hello"}]"#).unwrap();
+        let mut snippet = library.snippets[0].clone();
+        snippet.expansion = "Changed".into();
+        library.put(Some("!ПРИВЕТ"), snippet).unwrap();
+        assert_eq!(library.snippets[0].expansion, "Changed");
+        library.remove("!ПРИВЕТ").unwrap();
+        assert!(library.snippets.is_empty());
+        assert!(Library::decode(
+            r#"[{"trigger":"!İ","expansion":"One"},{"trigger":"!i","expansion":"Two"}]"#
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn save_replaces_a_file_and_remains_readable() {
+        let directory =
+            std::env::temp_dir().join(format!("snippetdeck-test-{}", uuid::Uuid::new_v4()));
+        let path = directory.join("library.json");
+        let library = Library::decode(r#"[{"trigger":"!test","expansion":"Value"}]"#).unwrap();
+        library.save(&path).unwrap();
+        Library::default().save(&path).unwrap();
+        assert!(Library::load(&path).unwrap().snippets.is_empty());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        fs::remove_dir_all(directory).unwrap();
     }
 }

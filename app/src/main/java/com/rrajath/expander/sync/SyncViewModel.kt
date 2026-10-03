@@ -24,6 +24,7 @@ internal class SyncViewModel(application: Application) : AndroidViewModel(applic
     )
     val state: StateFlow<SyncUiState> = _state.asStateFlow()
     private var pendingSync: Pair<String, SyncChoice>? = null
+    private var stopping = false
 
     enum class SyncChoice { MERGE, THIS_DEVICE, OTHER_DEVICE }
 
@@ -31,6 +32,7 @@ internal class SyncViewModel(application: Application) : AndroidViewModel(applic
     fun hasHistory() = sync.hasHistory()
 
     fun syncWith(accessToken: String, choice: SyncChoice = SyncChoice.MERGE) {
+        if (stopping) return
         if (_state.value == SyncUiState.Working) {
             pendingSync = accessToken to choice
             return
@@ -44,12 +46,14 @@ internal class SyncViewModel(application: Application) : AndroidViewModel(applic
                     SyncChoice.OTHER_DEVICE -> sync.useOtherDevice(accessToken)
                 }
             }.onSuccess { result ->
-                _state.value = when (result) {
+                if (!stopping) _state.value = when (result) {
                     is SyncOutcome.Done -> SyncUiState.Synced(result.count)
                     is SyncOutcome.Conflict -> SyncUiState.Conflict(result.triggers)
                 }
             }.onFailure { error ->
-                _state.value = SyncUiState.Failed(error.message ?: "Google Drive sync failed")
+                if (!stopping) _state.value = if (error is PendingSyncConflict) {
+                    SyncUiState.Conflict(error.triggers)
+                } else SyncUiState.Failed(error.message ?: "Google Drive sync failed")
             }
             pendingSync?.also { (token, nextChoice) ->
                 pendingSync = null
@@ -63,18 +67,28 @@ internal class SyncViewModel(application: Application) : AndroidViewModel(applic
     }
 
     fun disconnect() {
+        if (stopping) return
+        stopping = true
+        pendingSync = null
+        _state.value = SyncUiState.Working
         viewModelScope.launch {
             runCatching { sync.disconnect() }
                 .onSuccess { _state.value = SyncUiState.Off }
                 .onFailure { _state.value = SyncUiState.Failed(it.message ?: "Cannot disconnect") }
+            stopping = false
         }
     }
 
     fun reset() {
+        if (stopping) return
+        stopping = true
+        pendingSync = null
+        _state.value = SyncUiState.Working
         viewModelScope.launch {
             runCatching { sync.reset() }
                 .onSuccess { _state.value = SyncUiState.Off }
                 .onFailure { _state.value = SyncUiState.Failed(it.message ?: "Cannot reset sync history") }
+            stopping = false
         }
     }
 }

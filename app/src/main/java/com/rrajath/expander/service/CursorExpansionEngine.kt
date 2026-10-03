@@ -1,5 +1,7 @@
 package com.rrajath.expander.service
 
+import com.rrajath.expander.domain.TriggerUtils
+
 /**
  * Pure cursor-aware text editing used by [TextExpansionService].
  *
@@ -41,8 +43,12 @@ internal object CursorExpansionEngine {
 
         val triggerEnd = cursor - 1
         var triggerStart = triggerEnd
-        while (triggerStart > 0 && !text[triggerStart - 1].isWhitespace()) {
-            triggerStart--
+        var characters = 0
+        while (triggerStart > 0) {
+            val codePoint = text.codePointBefore(triggerStart)
+            if (Character.isWhitespace(codePoint) || Character.isSpaceChar(codePoint)) break
+            triggerStart -= Character.charCount(codePoint)
+            if (++characters > TriggerUtils.MAX_TRIGGER_LENGTH) return null
         }
         if (triggerStart == triggerEnd) return null
 
@@ -77,12 +83,13 @@ internal object CursorExpansionEngine {
     ): TextEdit? {
         if (history.expansion.isEmpty()) return null
 
+        val removed = Character.charCount(history.expansion.codePointBefore(history.expansion.length))
         val expectedText = history.textBeforeTrigger +
-            history.expansion.dropLast(1) +
+            history.expansion.dropLast(removed) +
             history.textAfterCursor
         if (currentText != expectedText) return null
 
-        val expectedCursor = history.textBeforeTrigger.length + history.expansion.length - 1
+        val expectedCursor = history.textBeforeTrigger.length + history.expansion.length - removed
         val cursorMatches = when {
             selectionStart >= 0 && selectionEnd >= 0 ->
                 selectionStart == selectionEnd && selectionStart == expectedCursor

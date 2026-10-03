@@ -1,6 +1,7 @@
 package com.rrajath.expander.data
 
 import kotlinx.coroutines.flow.Flow
+import com.rrajath.expander.domain.TriggerUtils
 
 class SnippetRepository(private val snippetDao: SnippetDao) {
 
@@ -12,47 +13,27 @@ class SnippetRepository(private val snippetDao: SnippetDao) {
 
     suspend fun getSnippetById(id: Long): Snippet? = snippetDao.getSnippetById(id)
 
-    suspend fun getSnippetByTrigger(trigger: String): Snippet? =
-        snippetDao.getSnippetByTrigger(trigger)
+    suspend fun update(snippet: Snippet, expected: Snippet) =
+        snippetDao.saveChecked(snippet, expected)
 
-    fun searchSnippets(query: String): Flow<List<Snippet>> = snippetDao.searchSnippets(query)
-
-    suspend fun insert(snippet: Snippet): Long = snippetDao.insert(snippet)
-
-    suspend fun update(snippet: Snippet) = snippetDao.update(snippet)
-
-    suspend fun delete(snippet: Snippet) = snippetDao.delete(snippet)
-
-    suspend fun deleteById(id: Long) = snippetDao.deleteById(id)
-
-    suspend fun deleteAll() = snippetDao.deleteAll()
+    suspend fun delete(snippet: Snippet) = snippetDao.deleteChecked(snippet)
 
     suspend fun replaceAll(snippets: List<Snippet>) = snippetDao.replaceAll(snippets)
 
-    suspend fun saveByTrigger(
+    suspend fun create(
         trigger: String,
         expansion: String,
         aliases: List<String> = emptyList()
     ): Snippet {
         val now = System.currentTimeMillis()
-        val existing = snippetDao.getSnippetByTrigger(trigger)
-        return if (existing == null) {
-            val snippet = Snippet(
-                trigger = trigger,
-                expansion = expansion,
-                aliases = aliases,
-                isEnabled = true,
-                createdAt = now,
-                updatedAt = now
-            )
-            snippet.copy(id = snippetDao.insert(snippet))
-        } else {
-            existing.copy(
-                trigger = trigger,
-                expansion = expansion,
-                aliases = aliases,
-                updatedAt = now
-            ).also { snippetDao.update(it) }
-        }
+        val snippet = Snippet(
+            trigger = TriggerUtils.normalize(trigger),
+            expansion = expansion,
+            aliases = aliases.map(TriggerUtils::normalizeAlias),
+            isEnabled = true,
+            createdAt = now,
+            updatedAt = now
+        )
+        return snippet.copy(id = snippetDao.saveChecked(snippet))
     }
 }

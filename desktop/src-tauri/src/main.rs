@@ -7,7 +7,7 @@ mod sync;
 mod update;
 
 use expansion::Expander;
-use library::{Library, Snippet};
+use library::{trigger_key, Library, Snippet};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{
@@ -28,6 +28,7 @@ use tauri_plugin_autostart::ManagerExt;
 
 struct AppState {
     library: Mutex<Library>,
+    library_error: Mutex<Option<String>>,
     import: Mutex<Option<Library>>,
     path: PathBuf,
     active_path: PathBuf,
@@ -46,6 +47,7 @@ struct AppState {
 #[serde(rename_all = "camelCase")]
 struct Snapshot {
     snippets: Vec<Snippet>,
+    library_error: Option<String>,
     active: bool,
     start_at_login: bool,
     status: String,
@@ -59,6 +61,7 @@ struct Snapshot {
 fn snapshot_uses_the_field_names_read_by_the_editor() {
     let snapshot = Snapshot {
         snippets: Vec::new(),
+        library_error: None,
         active: true,
         start_at_login: true,
         status: String::new(),
@@ -77,6 +80,7 @@ fn snapshot_uses_the_field_names_read_by_the_editor() {
 fn snapshot(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Snapshot {
     Snapshot {
         snippets: state.library.lock().unwrap().snippets.clone(),
+        library_error: state.library_error.lock().unwrap().clone(),
         active: state.expander.enabled.load(Ordering::Relaxed),
         start_at_login: app.autolaunch().is_enabled().unwrap_or(false),
         status: state.expander.status.read().unwrap().clone(),
@@ -104,9 +108,17 @@ async fn install_update(app: tauri::AppHandle) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let _guard = state.install_lock.lock().unwrap();
-        let release = state.available_update.lock().unwrap().clone()
+        let release = state
+            .available_update
+            .lock()
+            .unwrap()
+            .clone()
             .ok_or("Check for updates before downloading")?;
-        let cache = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("updates");
+        let cache = app
+            .path()
+            .app_cache_dir()
+            .map_err(|e| e.to_string())?
+            .join("updates");
         let path = update::download(&release, &cache, |received| {
             let percent = (received * 100 / release.size) as u8;
             let _ = app.emit("snippetdeck-update-progress", percent);
@@ -125,6 +137,9 @@ fn save_change(
     change: impl FnOnce(&mut Library) -> Result<(), String>,
 ) -> Result<(), String> {
     let mut current = state.library.lock().unwrap();
+    if state.library_error.lock().unwrap().is_some() {
+        return Err("The saved library could not be read. Import a backup to recover it.".into());
+    }
     let mut next = current.clone();
     change(&mut next)?;
     next.save(&state.path)?;
@@ -138,17 +153,45 @@ fn save_snippet(
     state: tauri::State<'_, AppState>,
     previous: Option<String>,
     snippet: Snippet,
+    expected: Option<Snippet>,
 ) -> Result<(), String> {
-    save_change(&state, |library| library.put(previous.as_deref(), snippet))
+    save_change(&state, |library| {
+        if let Some(trigger) = &previous {
+            let current = library
+                .snippets
+                .iter()
+                .find(|s| trigger_key(&s.trigger) == trigger_key(trigger));
+            if expected.is_none() || current != expected.as_ref() {
+                return Err("Snippet changed while editing. Reopen it before saving.".into());
+            }
+        }
+        library.put(previous.as_deref(), snippet)
+    })
 }
 
 #[tauri::command]
-fn remove_snippet(state: tauri::State<'_, AppState>, trigger: String) -> Result<(), String> {
-    save_change(&state, |library| library.remove(&trigger))
+fn remove_snippet(
+    state: tauri::State<'_, AppState>,
+    trigger: String,
+    expected: Snippet,
+) -> Result<(), String> {
+    save_change(&state, |library| {
+        let current = library
+            .snippets
+            .iter()
+            .find(|s| trigger_key(&s.trigger) == trigger_key(&trigger));
+        if current != Some(&expected) {
+            return Err("Snippet changed. Reopen it before deleting.".into());
+        }
+        library.remove(&trigger)
+    })
 }
 
 #[tauri::command]
 fn set_active(state: tauri::State<'_, AppState>, active: bool) -> Result<(), String> {
+    if active && state.library_error.lock().unwrap().is_some() {
+        return Err("Import a backup before enabling text expansion".into());
+    }
     state.persist_active(active)?;
     state.expander.enabled.store(active, Ordering::Relaxed);
     Ok(())
@@ -203,10 +246,17 @@ fn finish_import(state: tauri::State<'_, AppState>) -> Result<(), String> {
         .unwrap()
         .take()
         .ok_or("Choose a backup first")?;
-    save_change(&state, |current| {
-        *current = library;
-        Ok(())
-    })
+    // A confirmed import is also the recovery path for an unreadable working file.
+    let mut current = state.library.lock().unwrap();
+    library.save(&state.path)?;
+    state.expander.update(library.snippets.clone());
+    *current = library;
+    *state.library_error.lock().unwrap() = None;
+    state.expander.enabled.store(
+        !fs::read_to_string(&state.active_path).is_ok_and(|value| value == "off"),
+        Ordering::Relaxed,
+    );
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -229,6 +279,12 @@ fn sync_internal(
 ) -> Result<SyncResult, String> {
     let state = app.state::<AppState>();
     let _guard = state.sync_lock.lock().unwrap();
+    if state.library_error.lock().unwrap().is_some() {
+        return Err("Import a backup before syncing an unreadable library".into());
+    }
+    if !interactive && !state.sync_active.load(Ordering::Relaxed) {
+        return Err("Google Drive is disconnected".into());
+    }
     let token = {
         let mut access = state.access.lock().unwrap();
         if access
@@ -273,28 +329,46 @@ fn sync_internal(
         local.collect_changes(&library)?;
     }
     let files = drive.list()?;
+    let names: std::collections::HashSet<_> = files.iter().map(|file| &file.name).collect();
+    if names.len() != files.len() {
+        return Err("Duplicate device files in Google Drive".into());
+    }
     let name = format!("snippetdeck-sync-v1-{}.json", local.replica.device_id);
     let own: Vec<_> = files.iter().filter(|file| file.name == name).collect();
     if own.len() > 1 {
         return Err("Duplicate device files in Google Drive".into());
     }
-    let others: Vec<_> = files
-        .iter()
-        .filter(|file| file.name != name)
-        .map(|file| drive.read(file))
-        .collect::<Result<_, _>>()?;
-    let merge = local.replica.merge(&others, choice == SyncChoice::Merge)?;
+    let others: Vec<_> = files.iter().filter(|file| file.name != name).collect();
+    if choice == SyncChoice::OtherDevice && others.len() != 1 {
+        return Err(
+            "Use the preferred device to resolve a conflict across multiple devices".into(),
+        );
+    }
+    let mut preferred = None;
+    let mut seen = local.seen_files.clone();
+    seen.retain(|id, _| others.iter().any(|file| &file.id == id));
+    let merge = local.replica.merge_from(
+        others
+            .iter()
+            .filter(|file| choice != SyncChoice::Merge || file.needs_download(&local.seen_files))
+            .map(|file| {
+                let replica = drive.read(file)?;
+                if let Some(version) = &file.version {
+                    seen.insert(file.id.clone(), version.clone());
+                }
+                if choice == SyncChoice::OtherDevice {
+                    preferred = Some(replica.clone());
+                }
+                Ok(replica)
+            }),
+        choice == SyncChoice::Merge,
+    )?;
     if choice == SyncChoice::ThisDevice {
         local.replica = merge.replica;
         local.keep_local(&library);
     } else if choice == SyncChoice::OtherDevice {
-        if others.len() != 1 {
-            return Err(
-                "Use the preferred device to resolve a conflict across multiple devices".into(),
-            );
-        }
-        let chosen = others[0]
-            .clone()
+        let chosen = preferred
+            .ok_or("The other device is unavailable")?
             .merge(&[], true)?
             .library
             .ok_or("The other device has unresolved conflicts")?;
@@ -327,6 +401,7 @@ fn sync_internal(
         local.replica = merge.replica;
     }
     local.file_id = own.first().map(|file| file.id.clone());
+    local.seen_files = seen;
     if old_state.as_ref() != Some(&local) {
         local.save(&state.sync_path)?;
     }
@@ -377,30 +452,45 @@ async fn sync_now(
 }
 
 #[tauri::command]
-fn disconnect_sync(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let _guard = state.sync_lock.lock().unwrap();
-    state.access.lock().unwrap().take();
-    google::forget_refresh();
-    fs::write(&state.sync_disabled_path, "off").map_err(|e| format!("Cannot disable sync: {e}"))?;
-    state.sync_active.store(false, Ordering::Relaxed);
-    Ok(())
+async fn disconnect_sync(app: tauri::AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _guard = state.sync_lock.lock().unwrap();
+        state.access.lock().unwrap().take();
+        google::forget_refresh();
+        fs::write(&state.sync_disabled_path, "off")
+            .map_err(|e| format!("Cannot disable sync: {e}"))?;
+        state.sync_active.store(false, Ordering::Relaxed);
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Cannot disconnect: {e}"))?
 }
 
 #[tauri::command]
-fn reset_sync(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let _guard = state.sync_lock.lock().unwrap();
-    fs::write(&state.sync_disabled_path, "off").map_err(|e| e.to_string())?;
-    if state.sync_path.exists() {
-        fs::remove_file(&state.sync_path).map_err(|e| format!("Cannot reset sync history: {e}"))?;
-    }
-    state.access.lock().unwrap().take();
-    google::forget_refresh();
-    state.sync_active.store(false, Ordering::Relaxed);
-    Ok(())
+async fn reset_sync(app: tauri::AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _guard = state.sync_lock.lock().unwrap();
+        fs::write(&state.sync_disabled_path, "off").map_err(|e| e.to_string())?;
+        if state.sync_path.exists() {
+            fs::remove_file(&state.sync_path)
+                .map_err(|e| format!("Cannot reset sync history: {e}"))?;
+        }
+        state.access.lock().unwrap().take();
+        google::forget_refresh();
+        state.sync_active.store(false, Ordering::Relaxed);
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Cannot reset sync: {e}"))?
 }
 
 #[tauri::command]
 fn export_file(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<bool, String> {
+    if state.library_error.lock().unwrap().is_some() {
+        return Err("The saved library could not be read; it remains on disk for recovery".into());
+    }
     state.expander.dialog_open.store(true, Ordering::Relaxed);
     let chosen = choose_export(&app);
     state.expander.dialog_open.store(false, Ordering::Relaxed);
@@ -542,13 +632,19 @@ fn main() {
             let active_path = path.with_file_name("enabled");
             let sync_path = path.with_file_name("sync.json");
             let sync_disabled_path = path.with_file_name("sync-disabled");
-            let library = Library::load(&path).map_err(std::io::Error::other)?;
+            let (library, library_error) = match Library::load(&path) {
+                Ok(library) => (library, None),
+                Err(error) => (Library::default(), Some(error)),
+            };
             let expander = Arc::new(Expander::new(library.snippets.clone()));
-            if fs::read_to_string(&active_path).is_ok_and(|value| value == "off") {
+            if library_error.is_some()
+                || fs::read_to_string(&active_path).is_ok_and(|value| value == "off")
+            {
                 expander.enabled.store(false, Ordering::Relaxed);
             }
             app.manage(AppState {
                 library: Mutex::new(library),
+                library_error: Mutex::new(library_error),
                 import: Mutex::new(None),
                 path,
                 active_path,
@@ -577,7 +673,9 @@ fn main() {
                     "toggle" => {
                         let state = app.state::<AppState>();
                         let enabled = !state.expander.enabled.load(Ordering::Relaxed);
-                        if state.persist_active(enabled).is_ok() {
+                        if state.library_error.lock().unwrap().is_none()
+                            && state.persist_active(enabled).is_ok()
+                        {
                             state.expander.enabled.store(enabled, Ordering::Relaxed);
                         }
                     }
@@ -589,7 +687,9 @@ fn main() {
             std::thread::spawn(move || {
                 let state = update_app.state::<AppState>();
                 let _guard = state.update_lock.lock().unwrap();
-                if let Ok(Some(release)) = update::check(&update_app.package_info().version.to_string()) {
+                if let Ok(Some(release)) =
+                    update::check(&update_app.package_info().version.to_string())
+                {
                     *state.available_update.lock().unwrap() = Some(release.clone());
                     let _ = update_app.emit("snippetdeck-update-available", release);
                 }

@@ -2,7 +2,7 @@
 
 <h1 align="center">SnippetDeck</h1>
 
-<p align="center">Turn a short trigger into the text you use every day. SnippetDeck works where you type on Android, Windows, macOS, and Linux; your library stays on your device unless you choose to sync it.</p>
+<p align="center">SnippetDeck expands short triggers into saved text on Android, Windows, macOS, and Linux X11. Keep replies, addresses, and templates on your device; connect your own Google Drive only when you want to sync them.</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Android-13%2B-505477" alt="Android 13+">
@@ -42,7 +42,7 @@ Install the app, create a snippet, then type its trigger followed by Space in an
 
 ## Documentation
 
-English lives at the normal project paths. Translations mirror the same filenames under `docs/<language-code>/`; adding another language means adding a directory and navigation links. The category and language stickers on each page show where you are.
+Choose a category and language below. English uses the normal project paths; translations mirror the same filenames under `docs/<language-code>/`. The [translation rules](CONTRIBUTING.md#documentation-and-languages) cover adding a language and keeping each version current.
 
 | Category | English | Русский |
 | --- | --- | --- |
@@ -52,4 +52,4 @@ English lives at the normal project paths. Translations mirror the same filename
 | ![Operations](https://img.shields.io/badge/Docs-Operations-505477) Release and maintenance | [Operations](docs/OPERATIONS.md) | [Эксплуатация](docs/ru/OPERATIONS.md) |
 | ![Privacy](https://img.shields.io/badge/Docs-Privacy-505477) Data and permissions | [Privacy](PRIVACY.md) | [Конфиденциальность](docs/ru/PRIVACY.md) |
 
-SnippetDeck builds on [Expander](https://github.com/rrajath/expander) by Rajath Radhakrishnan and contributors. Installed Android identifiers and legacy data formats remain compatible with existing libraries.
+SnippetDeck builds on [Expander](https://github.com/rrajath/expander) by Rajath Ramakrishna and contributors. Installed Android identifiers and legacy data formats remain compatible with existing libraries.

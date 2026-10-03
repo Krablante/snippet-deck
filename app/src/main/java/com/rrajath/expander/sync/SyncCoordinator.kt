@@ -29,17 +29,24 @@ internal class SyncCoordinator(context: Context) {
             val account = drive.accountId()
             val previous = store.load()
             require(previous == null || previous.accountId == account) {
-                "This device was connected to a different Google account. Disconnect first."
+                "This device was connected to a different Google account. Use Switch Google account to clear its sync history first."
             }
             val library = dao.getAllSnippetsOnce()
             val local = SyncLibrary.collectChanges(previous ?: SyncLibrary.empty(account), library)
             val files = drive.list()
+            require(files.map { it.name }.distinct().size == files.size) { "Duplicate device files in Google Drive" }
             val ownFiles = files.filter { it.name == "snippetdeck-sync-v1-${local.replica.deviceId}.json" }
             require(ownFiles.size <= 1) { "Duplicate device files in Google Drive" }
-            val others = files.filterNot { it in ownFiles }.map(drive::read)
-            require(others.map { it.deviceId }.distinct().size == others.size) {
-                "Duplicate device identities in Google Drive"
-            }
+            val identities = mutableSetOf<String>()
+            val peerFiles = files.filterNot { it in ownFiles }
+            val seen = local.seenFiles.orEmpty().filterKeys { id -> peerFiles.any { it.id == id } }.toMutableMap()
+            val others = peerFiles.asSequence()
+                .filter { it.needsDownload(seen) }.map { file ->
+                    drive.read(file).also { replica ->
+                        require(identities.add(replica.deviceId)) { "Duplicate device identities in Google Drive" }
+                        file.version?.let { seen[file.id] = it }
+                    }
+                }
             val merged = SyncLibrary.merge(local.replica, others)
             val newLibrary = merged.snippets
             if (newLibrary != null && !sameLibrary(library, newLibrary)) {
@@ -49,6 +56,7 @@ internal class SyncCoordinator(context: Context) {
                 replica = merged.replica,
                 baseline = (newLibrary ?: library).map(Snippet::forSync),
                 fileId = ownFiles.singleOrNull()?.id,
+                seenFiles = seen,
             )
             if (state != previous) store.save(state)
             if (newLibrary == null) return@withContext SyncOutcome.Conflict(merged.conflicts)
@@ -70,7 +78,7 @@ internal class SyncCoordinator(context: Context) {
             val files = drive.list()
             val ownFiles = files.filter { it.name == "snippetdeck-sync-v1-${previous.replica.deviceId}.json" }
             require(ownFiles.size <= 1) { "Duplicate device files in Google Drive" }
-            val merged = SyncLibrary.merge(previous.replica, files.filterNot { it in ownFiles }.map(drive::read), validate = false)
+            val merged = SyncLibrary.merge(previous.replica, files.asSequence().filterNot { it in ownFiles }.map(drive::read), validate = false)
             val chosen = SyncLibrary.keepLocal(previous.copy(replica = merged.replica), library)
                 .copy(fileId = ownFiles.singleOrNull()?.id)
             store.save(chosen)
@@ -86,6 +94,7 @@ internal class SyncCoordinator(context: Context) {
         withContext(Dispatchers.IO) {
             val drive = GoogleDriveSync(accessToken)
             val previous = store.load() ?: error("Connect Google Drive first")
+            val current = dao.getAllSnippetsOnce()
             require(previous.accountId == drive.accountId()) { "Google account changed" }
             val files = drive.list()
             val own = files.filter { it.name == "snippetdeck-sync-v1-${previous.replica.deviceId}.json" }
@@ -95,7 +104,6 @@ internal class SyncCoordinator(context: Context) {
             val other = drive.read(otherFiles.single())
             val chosen = SyncLibrary.merge(other, emptyList()).snippets
                 ?: error("The other device has unresolved conflicts")
-            val current = dao.getAllSnippetsOnce()
             val merged = SyncLibrary.merge(previous.replica, listOf(other), validate = false)
             val resolved = SyncLibrary.keepLocal(previous.copy(replica = merged.replica), chosen)
                 .copy(fileId = own.singleOrNull()?.id)

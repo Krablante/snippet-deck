@@ -7,6 +7,22 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+abstract class GenerateLicenseAssets : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val licenseFile: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val target = outputDirectory.file("LICENSE").get().asFile
+        target.parentFile.mkdirs()
+        licenseFile.get().asFile.copyTo(target, overwrite = true)
+    }
+}
+
 android {
     namespace = "com.rrajath.expander"
     compileSdk = 37
@@ -15,8 +31,8 @@ android {
         applicationId = "com.rrajath.expander"
         minSdk = 33
         targetSdk = 36
-        versionCode = 10805
-        versionName = "1.8.5"
+        versionCode = 10806
+        versionName = "1.8.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -72,6 +88,13 @@ android {
     buildFeatures {
         compose = true
     }
+}
+
+androidComponents.onVariants { variant ->
+    val task = tasks.register<GenerateLicenseAssets>("generate${variant.name.replaceFirstChar(Char::uppercaseChar)}LicenseAssets") {
+        licenseFile.set(rootProject.layout.projectDirectory.file("LICENSE"))
+    }
+    variant.sources.assets?.addGeneratedSourceDirectory(task, GenerateLicenseAssets::outputDirectory)
 }
 
 kotlin {

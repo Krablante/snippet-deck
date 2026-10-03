@@ -78,7 +78,11 @@ internal class GitHubReleaseUpdater(
         try {
             when (val responseCode = connection.responseCode) {
                 HttpURLConnection.HTTP_OK -> parseRelease(
-                    connection.inputStream.bufferedReader().use { it.readText() },
+                    connection.inputStream.use { input ->
+                        val bytes = input.readNBytes(MAX_RELEASE_BYTES + 1)
+                        if (bytes.size > MAX_RELEASE_BYTES) throw UpdateException("The release metadata is too large.")
+                        String(bytes, Charsets.UTF_8)
+                    },
                 )
 
                 HttpURLConnection.HTTP_NOT_FOUND -> throw UpdateException(
@@ -134,7 +138,7 @@ internal class GitHubReleaseUpdater(
                         if (read < 0) break
                         currentCoroutineContext().ensureActive()
                         downloaded += read
-                        if (downloaded > MAX_APK_BYTES) throw UpdateException("The release APK is too large.")
+                        if (downloaded > release.asset.size) throw UpdateException("The APK exceeds its declared size.")
                         output.write(buffer, 0, read)
                         digest.update(buffer, 0, read)
 
@@ -247,6 +251,7 @@ internal class GitHubReleaseUpdater(
         private const val READ_TIMEOUT_MS = 60_000
         private const val HTTP_TOO_MANY_REQUESTS = 429
         private const val MAX_APK_BYTES = 100L * 1024L * 1024L
+        private const val MAX_RELEASE_BYTES = 1_000_000
         private val ALLOWED_DOWNLOAD_HOSTS = setOf(
             "github.com",
             "objects.githubusercontent.com",
@@ -255,10 +260,14 @@ internal class GitHubReleaseUpdater(
 
         internal fun parseRelease(json: String): GitHubRelease {
             val root = JSONObject(json)
+            if (root.optBoolean("draft", false) || root.optBoolean("prerelease", false)) {
+                throw UpdateException("GitHub did not return a stable release.")
+            }
             val tag = root.optString("tag_name")
             val version = SemanticVersion.parse(tag)
                 ?: throw UpdateException("The GitHub release has an invalid version: $tag")
             val expectedAssetName = "snippet-deck-v$version.apk"
+            if (tag != "v$version") throw UpdateException("The release tag is not canonical.")
             val assets = root.optJSONArray("assets")
                 ?: throw UpdateException("The GitHub release has no APK asset.")
 
@@ -266,11 +275,10 @@ internal class GitHubReleaseUpdater(
             for (index in 0 until assets.length()) {
                 val asset = assets.getJSONObject(index)
                 val name = asset.optString("name")
-                if (!name.equals(expectedAssetName, ignoreCase = true)) continue
+                if (name != expectedAssetName) continue
 
                 val downloadUrl = asset.optString("browser_download_url")
-                val uri = runCatching { URI(downloadUrl) }.getOrNull()
-                if (uri?.scheme != "https" || uri.host != "github.com") {
+                if (downloadUrl != "https://github.com/Krablante/snippet-deck/releases/download/$tag/$expectedAssetName") {
                     throw UpdateException("The release APK has an invalid download address.")
                 }
                 val digest = asset.optString("digest").takeIf(String::isNotBlank)
@@ -301,6 +309,7 @@ internal class GitHubReleaseUpdater(
         }
 
         private fun validateDeclaredDigest(declared: String): String {
+            if (!declared.startsWith("sha256:")) throw UpdateException("GitHub returned an invalid APK digest.")
             val expected = declared.removePrefix("sha256:").lowercase()
             if (!expected.matches(Regex("[0-9a-f]{64}"))) {
                 throw UpdateException("GitHub returned an invalid APK digest.")

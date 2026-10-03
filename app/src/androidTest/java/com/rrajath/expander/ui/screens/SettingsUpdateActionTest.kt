@@ -44,7 +44,7 @@ class SettingsUpdateActionTest {
     }
 
     @Test
-    fun themeDialogShowsWhiteBlackAndSepiaPreviews() {
+    fun themeDialogShowsChalkInkAndParchmentPreviews() {
         composeTestRule.setContent {
             SnippetDeckTheme {
                 SettingsScreen(
@@ -61,8 +61,8 @@ class SettingsUpdateActionTest {
             .performScrollTo()
             .performClick()
 
-        composeTestRule.onNodeWithText("Clean neutral canvas").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Deep low-light palette").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Warm book-like paper").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Warm and light").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Quiet and dark").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Soft and earthy").assertIsDisplayed()
     }
 }

@@ -3,9 +3,36 @@ package com.rrajath.expander.service
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CursorExpansionEngineTest {
+
+    @Test
+    fun `ignores oversized token without accepting its suffix`() {
+        val text = "x".repeat(100_000) + "!u "
+        assertNull(CursorExpansionEngine.findTriggerBeforeCursor(text, text.length, text.length))
+        val supplementary = "!" + "😀".repeat(39) + " "
+        assertEquals(supplementary.dropLast(1), CursorExpansionEngine.findTriggerBeforeCursor(supplementary, supplementary.length, supplementary.length)?.typedTrigger)
+    }
+
+    @Test
+    fun `undo restores trigger after deleting supplementary character`() {
+        val occurrence = CursorExpansionEngine.findTriggerBeforeCursor("!u suffix", 3, 3)!!
+        val result = CursorExpansionEngine.expand(occurrence, "Done 😀")
+        val undo = CursorExpansionEngine.undoAfterBackspace("Done suffix", 5, 5, result.history)
+        assertEquals("!usuffix", undo?.text)
+        assertEquals(2, undo?.cursor)
+    }
+
+    @Test
+    fun `placeholder processing preserves unknown patterns and handles repeated values`() {
+        val result = SnippetProcessor.process("{{year}} ".repeat(10_000))
+        val year = result.substringBefore(' ')
+        assertTrue(year.matches(Regex("\\d{4}")))
+        assertEquals("$year ".repeat(10_000), result)
+        assertEquals("{{unknown}} {{ date:invalid }}", SnippetProcessor.process("{{unknown}} {{ date:invalid }}"))
+    }
 
     @Test
     fun `expands trigger at end of text`() {

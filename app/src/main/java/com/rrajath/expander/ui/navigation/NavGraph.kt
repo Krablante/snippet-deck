@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.Lifecycle
@@ -33,6 +34,7 @@ import com.google.android.gms.common.api.Scope
 import com.rrajath.expander.sync.SyncUiState
 import com.rrajath.expander.sync.SyncViewModel
 import com.rrajath.expander.ui.screens.AddEditSnippetScreen
+import com.rrajath.expander.ui.screens.SnippetEditorDraft
 import com.rrajath.expander.ui.screens.SettingsScreen
 import com.rrajath.expander.ui.screens.SnippetListScreen
 import com.rrajath.expander.update.UpdateUiState
@@ -73,17 +75,22 @@ internal fun NavGraph(
     viewModel: SnippetViewModel = viewModel(),
     syncViewModel: SyncViewModel = viewModel(),
 ) {
-    // Navigate to Add Snippet when launched via ACTION_PROCESS_TEXT.
-    // MainActivity gets a fresh instance per PROCESS_TEXT launch, so firing
-    // once per composition is fine.
+    var initialExpansionHandled by rememberSaveable { mutableStateOf(false) }
+    // Restoring an activity also restores its editor destination; do not push another one.
     LaunchedEffect(Unit) {
-        if (initialExpansion != null) {
+        if (initialExpansion != null && !initialExpansionHandled) {
+            initialExpansionHandled = true
             navController.navigate(Screen.AddSnippet.createRoute(initialExpansion))
         }
     }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    LaunchedEffect(viewModel) {
+        viewModel.errors.collect { message ->
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
+    }
     val syncState by syncViewModel.state.collectAsState()
     val authorizationClient = remember(context) { Identity.getAuthorizationClient(context) }
     var syncChoice by remember { mutableStateOf(SyncViewModel.SyncChoice.MERGE) }
@@ -128,7 +135,7 @@ internal fun NavGraph(
     DisposableEffect(lifecycleOwner, initialExpansion) {
         fun onForeground() {
             val now = SystemClock.elapsedRealtime()
-            if (initialExpansion == null && syncViewModel.connected() && now - lastPull > 60_000) {
+            if (initialExpansion == null && syncViewModel.connected() && (lastPull == 0L || now - lastPull > 60_000)) {
                 lastPull = now
                 syncWithGoogle()
             }
@@ -266,10 +273,10 @@ internal fun NavGraph(
                 snippet = null,
                 reservedTriggers = allSnippets
                     .flatMap { TriggerUtils.allTriggers(it.trigger, it.aliases) }
-                    .map(String::lowercase)
+                    .map(TriggerUtils::matchKey)
                     .toSet(),
                 initialExpansion = prefillExpansion,
-                onSave = { trigger, expansion, aliases ->
+                onSave = { trigger, expansion, aliases, _ ->
                     viewModel.insertSnippet(trigger, expansion, aliases) {
                         navController.popBackStack()
                         if (syncViewModel.connected()) syncWithGoogle()
@@ -288,30 +295,35 @@ internal fun NavGraph(
             )
         ) { backStackEntry ->
             val snippetId = backStackEntry.arguments?.getLong("snippetId") ?: return@composable
-            var snippet by remember { mutableStateOf<com.rrajath.expander.data.Snippet?>(null) }
+            val draft: SnippetEditorDraft = viewModel(backStackEntry, key = "snippet-$snippetId")
 
             LaunchedEffect(snippetId) {
                 viewModel.getSnippetById(snippetId) { result ->
-                    snippet = result
+                    if (result != null) draft.begin(result, null)
+                    else if (!draft.initialized) {
+                        Toast.makeText(context, "Snippet no longer exists", Toast.LENGTH_LONG).show()
+                        navController.popBackStack()
+                    }
                 }
             }
 
-            snippet?.let { currentSnippet ->
+            draft.original?.let { currentSnippet ->
                 AddEditSnippetScreen(
                     snippet = currentSnippet,
                     reservedTriggers = allSnippets
                         .asSequence()
                         .filterNot { it.id == snippetId }
                         .flatMap { TriggerUtils.allTriggers(it.trigger, it.aliases).asSequence() }
-                        .map(String::lowercase)
+                        .map(TriggerUtils::matchKey)
                         .toSet(),
-                    onSave = { trigger, expansion, aliases ->
-                        val updatedSnippet = currentSnippet.copy(
+                    onSave = { trigger, expansion, aliases, original ->
+                        val expected = original ?: return@AddEditSnippetScreen
+                        val updatedSnippet = expected.copy(
                             trigger = trigger,
                             expansion = expansion,
                             aliases = aliases
                         )
-                        viewModel.updateSnippet(updatedSnippet) {
+                        viewModel.updateSnippet(updatedSnippet, expected) {
                             navController.popBackStack()
                             if (syncViewModel.connected()) syncWithGoogle()
                         }

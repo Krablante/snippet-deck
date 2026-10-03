@@ -54,7 +54,7 @@ internal class UpdateViewModel(application: Application) : AndroidViewModel(appl
             _state.value = UpdateUiState.UnsupportedBuild
             return
         }
-        if (operation?.isActive == true) {
+        if (operation != null) {
             if (activeCheckIsSilent) {
                 activeCheckIsSilent = false
                 _state.value = UpdateUiState.Checking
@@ -99,7 +99,7 @@ internal class UpdateViewModel(application: Application) : AndroidViewModel(appl
             is UpdateUiState.DownloadFailed -> current.release
             else -> return
         }
-        if (operation?.isActive == true) return
+        if (operation != null) return
 
         activeCheckIsSilent = false
         _state.value = UpdateUiState.Downloading(release, progress = 0)
@@ -125,7 +125,6 @@ internal class UpdateViewModel(application: Application) : AndroidViewModel(appl
     fun cancelDownload() {
         if (_state.value !is UpdateUiState.Downloading) return
         operation?.cancel()
-        operation = null
         _state.value = UpdateUiState.Idle
     }
 

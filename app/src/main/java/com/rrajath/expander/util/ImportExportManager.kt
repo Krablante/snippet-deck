@@ -30,9 +30,9 @@ object ImportExportManager {
         uri: Uri
     ): Result<List<Snippet>> = withContext(Dispatchers.IO) {
         runCatching {
-            val json = context.contentResolver.openInputStream(uri)?.use(::readLimited)
+            val text = context.contentResolver.openInputStream(uri)?.use(::readLimited)
                 ?: error("Cannot open the selected file")
-            SnippetBackupCodec.decodeJson(json)
+            SnippetBackupCodec.decodeText(text)
         }
     }
 
@@ -49,11 +49,11 @@ object ImportExportManager {
             val read = input.read(buffer)
             if (read < 0) break
             total += read
-            if (total > SnippetBackupCodec.MAX_BACKUP_BYTES) {
+            if (total > SnippetBackupCodec.MAX_BACKUP_BYTES * 2) {
                 throw BackupFormatException("Backup is too large")
             }
             output.write(buffer, 0, read)
         }
-        return output.toString(Charsets.UTF_8.name())
+        return SnippetBackupCodec.decodeUtf8(output.toByteArray())
     }
 }

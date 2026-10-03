@@ -6,14 +6,12 @@ import android.os.Bundle
 import android.os.UserManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import androidx.core.os.bundleOf
 import com.rrajath.expander.data.AppDatabase
 import com.rrajath.expander.data.Snippet
 import com.rrajath.expander.data.SnippetRepository
 import com.rrajath.expander.domain.DynamicHelp
 import com.rrajath.expander.domain.TriggerUtils
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.first
 
 class TextExpansionService : AccessibilityService() {
 
@@ -68,10 +66,12 @@ class TextExpansionService : AccessibilityService() {
         // Load snippets into cache
         serviceScope.launch {
             repository.getEnabledSnippets().collect { snippets ->
-                snippetsByTrigger = buildMap {
-                    for (snippet in snippets + DynamicHelp.asVirtualSnippet(snippets)) {
-                        for (trigger in TriggerUtils.allTriggers(snippet.trigger, snippet.aliases)) {
-                            putIfAbsent(TriggerUtils.matchKey(trigger), snippet)
+                snippetsByTrigger = withContext(Dispatchers.Default) {
+                    buildMap {
+                        for (snippet in snippets + DynamicHelp.asVirtualSnippet(snippets)) {
+                            for (trigger in TriggerUtils.allTriggers(snippet.trigger, snippet.aliases)) {
+                                putIfAbsent(TriggerUtils.matchKey(trigger), snippet)
+                            }
                         }
                     }
                 }
@@ -83,22 +83,35 @@ class TextExpansionService : AccessibilityService() {
         if (event == null) return
         initializeLibraryIfUnlocked()
         if (!libraryInitialized) return
-        if (!isServiceEnabled(this)) return
+        if (!isServiceEnabled(this) || event.packageName?.toString() == packageName ||
+            event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED ||
+            event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            lastExpansion = null
+            pendingAppliedText = null
+            return
+        }
 
         // Only process text change events
         if (event.eventType != AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) return
 
         val source = event.source ?: return
+        if (!source.isEditable) return
+        if (source.isPassword) {
+            lastExpansion = null
+            pendingAppliedText = null
+            return
+        }
 
         try {
             val currentText = source.text?.toString() ?: ""
             val selectionStart = source.textSelectionStart
             val selectionEnd = source.textSelectionEnd
 
-            // Ignore the text-change event emitted by our own ACTION_SET_TEXT.
+            // A queued user event and ACTION_SET_TEXT can both expose the applied value.
+            // Ignore all duplicates until the field actually changes.
             pendingAppliedText?.let { appliedText ->
-                pendingAppliedText = null
                 if (currentText == appliedText) return
+                pendingAppliedText = null
             }
 
             val undoEdit = lastExpansion?.let { history ->

@@ -18,27 +18,54 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.rrajath.expander.data.Snippet
 import com.rrajath.expander.domain.TriggerUtils
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
+
+// A destination owns the draft and the row it was opened from, across activity recreation.
+internal class SnippetEditorDraft : ViewModel() {
+    var initialized by mutableStateOf(false)
+        private set
+    var original: Snippet? = null
+        private set
+    var initialText = ""
+        private set
+    val trigger = mutableStateOf("")
+    val aliases = mutableStateOf("")
+    val expansion = mutableStateOf("")
+
+    fun begin(snippet: Snippet?, initialExpansion: String?) {
+        if (initialized) return
+        original = snippet
+        initialText = snippet?.expansion ?: initialExpansion.orEmpty()
+        trigger.value = snippet?.trigger.orEmpty()
+        aliases.value = snippet?.aliases?.joinToString("; ").orEmpty()
+        expansion.value = initialText
+        initialized = true
+    }
+}
 
 @Composable
 fun AddEditSnippetScreen(
     snippet: Snippet?,
     reservedTriggers: Set<String>,
-    onSave: (String, String, List<String>) -> Unit,
+    onSave: (String, String, List<String>, Snippet?) -> Unit,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier,
     initialExpansion: String? = null,
 ) {
-    var trigger by remember(snippet?.id) { mutableStateOf(snippet?.trigger.orEmpty()) }
-    var aliasesText by remember(snippet?.id) { mutableStateOf(snippet?.aliases?.joinToString("; ").orEmpty()) }
-    var expansion by remember(snippet?.id) { mutableStateOf(snippet?.expansion ?: initialExpansion.orEmpty()) }
+    val draft: SnippetEditorDraft = viewModel(key = "snippet-${snippet?.id ?: "new"}")
+    draft.begin(snippet, initialExpansion)
+    var trigger by draft.trigger
+    var aliasesText by draft.aliases
+    var expansion by draft.expansion
     var triggerError by remember { mutableStateOf<String?>(null) }
     var aliasesError by remember { mutableStateOf<String?>(null) }
     var expansionError by remember { mutableStateOf<String?>(null) }
     var showPlaceholders by remember { mutableStateOf(false) }
     var confirmDiscard by remember { mutableStateOf(false) }
-    val changed = trigger != snippet?.trigger.orEmpty() ||
-        aliasesText != snippet?.aliases?.joinToString("; ").orEmpty() ||
-        expansion != (snippet?.expansion ?: initialExpansion.orEmpty())
+    val changed = trigger != draft.original?.trigger.orEmpty() ||
+        aliasesText != draft.original?.aliases?.joinToString("; ").orEmpty() ||
+        expansion != draft.initialText
     BackHandler(enabled = changed) { confirmDiscard = true }
 
     fun save() {
@@ -51,7 +78,7 @@ fun AddEditSnippetScreen(
             else aliasesError = "$conflict is already used by another snippet"
         }
         expansionError = if (expansion.isBlank()) "Expansion cannot be empty" else null
-        if (triggerError == null && aliasesError == null && expansionError == null) onSave(normalized, expansion, aliases)
+        if (triggerError == null && aliasesError == null && expansionError == null) onSave(normalized, expansion, aliases, draft.original)
     }
 
     if (confirmDiscard) {

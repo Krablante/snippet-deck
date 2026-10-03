@@ -8,6 +8,20 @@ import org.junit.Test
 
 class GitHubReleaseUpdaterTest {
     @Test
+    fun releaseRejectsNonStableOrMismatchedOfficialAssets() {
+        val json = """{"draft":false,"prerelease":false,"tag_name":"v1.6.0","assets":[{"name":"snippet-deck-v1.6.0.apk","browser_download_url":"https://github.com/Krablante/snippet-deck/releases/download/v1.6.0/snippet-deck-v1.6.0.apk","size":100,"digest":"sha256:${"a".repeat(64)}"}]}"""
+        for (invalid in listOf(
+            json.replace("\"draft\":false", "\"draft\":true"),
+            json.replace("\"prerelease\":false", "\"prerelease\":true"),
+            json.replace("Krablante/", "other/"),
+            json.replace("snippet-deck-v", "Snippet-deck-v"),
+            json.replace("sha256:", ""),
+        )) {
+            assertThrows(UpdateException::class.java) { GitHubReleaseUpdater.parseRelease(invalid) }
+        }
+    }
+
+    @Test
     fun semanticVersionParsesStableTagsAndComparesComponents() {
         assertEquals(SemanticVersion(1, 5, 0), SemanticVersion.parse("v1.5.0"))
         assertEquals(SemanticVersion(2, 0, 3), SemanticVersion.parse("2.0.3"))

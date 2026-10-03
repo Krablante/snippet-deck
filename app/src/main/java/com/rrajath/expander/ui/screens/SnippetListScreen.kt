@@ -119,6 +119,7 @@ internal fun SnippetListScreen(
                         onClick = { onSnippetClick(snippet.id) },
                         onDelete = { onSnippetDelete(snippet) },
                         onToggle = { onSnippetToggle(snippet) },
+                        syncConnected = syncConnected,
                     )
                 }
             }
@@ -205,11 +206,13 @@ internal fun SnippetListScreen(
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun SnippetItem(
+internal fun SnippetItem(
     snippet: Snippet,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+    syncConnected: Boolean = false,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -217,7 +220,7 @@ private fun SnippetItem(
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("Delete ${snippet.trigger}?") },
-            text = { Text("This snippet will be removed from this device.") },
+            text = { Text(if (syncConnected) "This snippet will be removed from this device and your other devices on their next sync." else "This snippet will be removed from this device.") },
             confirmButton = {
                 TextButton(onClick = { confirmDelete = false; onDelete() }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
@@ -226,7 +229,7 @@ private fun SnippetItem(
     }
     val colors = MaterialTheme.colorScheme
     Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)
+        modifier = modifier.fillMaxWidth().heightIn(min = 72.dp)
             .combinedClickable(onClick = onClick, onLongClick = { menuOpen = true })
             .padding(start = 20.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -255,7 +258,7 @@ private fun SnippetItem(
                 )
             }
             Text(
-                snippet.expansion.replace('\n', ' '),
+                snippet.expansion.take(160).replace('\n', ' '),
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.onSurfaceVariant,
                 maxLines = 1,

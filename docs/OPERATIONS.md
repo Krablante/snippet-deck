@@ -6,9 +6,11 @@ SnippetDeck has no project backend to deploy. The operated surfaces are a GitHub
 
 ## Build and CI
 
-The Android workflow runs unit tests, lint and a debug build. The desktop workflow packages Linux x64 (`.deb`), Windows x64 (`.msi`), and Apple Silicon and Intel macOS (`.dmg`) on their respective runners. Pushes and pull requests touching only documentation skip app builds; changes to app code or each platform's workflow run the corresponding jobs. A manual desktop workflow run leaves artifacts in Actions but does not publish a release.
+The Android workflow runs unit tests and lint, and builds the app and instrumentation APKs. Device tests run separately through the command in Contributing. The desktop workflow runs Rust tests before packaging Linux x64 (`.deb`), Windows x64 (`.msi`), and Apple Silicon and Intel macOS (`.dmg`) on their respective runners. Pushes and pull requests touching only documentation skip app builds; changes to app code or each platform's workflow run the corresponding jobs. A manual desktop workflow run leaves artifacts in Actions but does not publish a release.
 
 The Android and desktop source toolchains and local test commands are in [Contributing](../CONTRIBUTING.md). Linux builds need `libxdo-dev`; the `.deb` installs a `libxdo3` dependency. The current macOS installers are unsigned and unnotarized. Public distribution without Gatekeeper prompts would need the maintainer's Apple Developer signing and notarization.
+
+Release calls the same desktop workflow with `official_build=true`; platform matrices, tests and installer commands have one owner. A regular CI build accepts an absent OAuth secret and leaves sign-in unavailable, while an official build fails without it. Release notes use GitHub's generated changes and platform installation notes, rather than text copied from a previous release.
 
 ## Release from `main`
 
@@ -16,7 +18,7 @@ Release through `.github/workflows/release.yml` with a semantic tag such as `v1.
 
 Before dispatching the workflow:
 
-1. Bump Android `versionName` and increasing `versionCode` in `app/build.gradle.kts`; set the same version in `desktop/src-tauri/Cargo.toml`, its `Cargo.lock`, and `desktop/src-tauri/tauri.conf.json`. Update the expected Android version code in the release workflow.
+1. Bump Android `versionName` and `versionCode` in `app/build.gradle.kts`; set the same version in `desktop/src-tauri/Cargo.toml`, its `Cargo.lock`, and `desktop/src-tauri/tauri.conf.json`. The workflow reads the expected version code from source and rejects a version or code that does not exceed the latest stable release.
 2. Confirm the tag matches both versions, review user-facing changes and their EN/RU documentation, and wait for the relevant CI checks.
 3. Confirm the encrypted Actions credentials exist. Never commit a keystore, signing values, OAuth tokens or the desktop OAuth client secret.
 
@@ -37,5 +39,9 @@ Google OAuth branding uses the [public site](https://krablante.github.io/snippet
 Exports are full local-library backups. Before reinstalling or resolving a sync conflict, save a copy from each affected device. An import replaces the entire local library after confirmation; disconnecting Drive does not remove its remote files. The [guide](GUIDE.md#back-up-or-move-a-library) gives the user's recovery path. Do not point two running desktop installations at one working library file.
 
 Review upstream [Expander](https://github.com/rrajath/expander) changes separately. Preserve cursor behavior, data migrations, signing identity, backup formats, and attribution when incorporating upstream code.
+
+## Dependency maintenance
+
+Keep Rust's lockfile under review; use `cargo tree --locked -i <crate>` to find who owns a dependency before changing it. Tauri's Linux GTK3 stack currently requires `glib` 0.18, which carries [RUSTSEC-2024-0429](https://rustsec.org/advisories/RUSTSEC-2024-0429.html), an unsafe string-variant iterator fixed in the incompatible 0.20 series. SnippetDeck and its currently resolved dependencies do not call that iterator. The GTK macros and Unicode parsing stack also carry maintenance advisories for `proc-macro-error` and several `unic-*` crates. Follow compatible upstream fixes; adding a second GLib version would leave the affected GTK stack in place.
 
 [← Project overview](../README.md) · [Guide](GUIDE.md) · [Development](../CONTRIBUTING.md) · [Architecture](ARCHITECTURE.md)

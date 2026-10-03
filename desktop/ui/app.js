@@ -2,6 +2,7 @@ const $ = (id) => document.getElementById(id);
 const invoke = (name, args) => window.__TAURI__?.core.invoke(name, args) ?? Promise.reject(new Error('Open SnippetDeck to edit your library.'));
 let snippets = [];
 let selected = null;
+let originalSnippet = null;
 let notificationTimer;
 let visible = 80;
 let syncConnected = false;
@@ -12,6 +13,7 @@ let updateAvailable = null;
 let updateBusy = false;
 let editorOriginal = '';
 let libraryScroll = 0;
+let libraryError = null;
 
 function editorValues() {
   return JSON.stringify([$('trigger').value, $('aliases').value, $('expansion').value, $('snippet-enabled').checked]);
@@ -70,7 +72,7 @@ function render() {
     .some(value => value.toLocaleLowerCase().includes(query)));
   $('count').textContent = `${filtered.length} ${filtered.length === 1 ? 'snippet' : 'snippets'}`;
   $('empty').hidden = filtered.length !== 0;
-  $('empty').textContent = snippets.length ? 'No matching snippets.' : 'No snippets yet. Add one to get started.';
+  $('empty').textContent = libraryError ? 'The saved library could not be opened. Import a backup from More options to recover it.' : snippets.length ? 'No matching snippets.' : 'No snippets yet. Add one to get started.';
   const list = $('list');
   list.replaceChildren();
   for (const snippet of filtered.slice(0, visible)) {
@@ -102,7 +104,7 @@ function render() {
     }
     const preview = document.createElement('div');
     preview.className = 'snippet-preview';
-    preview.textContent = snippet.expansion.replace(/\s+/g, ' ');
+    preview.textContent = snippet.expansion.slice(0, 160).replace(/\s+/g, ' ');
     row.append(preview);
     row.addEventListener('click', () => openEditor(snippet));
     list.append(row);
@@ -120,6 +122,7 @@ function render() {
 function edit(snippet = null) {
   if (!document.querySelector('.shell').classList.contains('editing')) libraryScroll = window.scrollY;
   selected = snippet?.trigger ?? null;
+  originalSnippet = snippet;
   $('editor-title').textContent = snippet ? 'Edit snippet' : 'New snippet';
   $('delete').hidden = !snippet;
   $('trigger').value = snippet?.trigger ?? '';
@@ -138,6 +141,7 @@ function edit(snippet = null) {
 
 function closeEditor() {
   selected = null;
+  originalSnippet = null;
   document.querySelector('.shell').classList.remove('editing');
   $('editor').hidden = true;
   $('welcome').hidden = false;
@@ -161,10 +165,13 @@ async function refresh() {
   try {
     const snapshot = await invoke('snapshot');
     snippets = snapshot.snippets;
+    libraryError = snapshot.libraryError;
+    for (const id of ['new', 'active', 'export']) $(id).disabled = Boolean(libraryError);
+    $('sync').disabled = Boolean(libraryError) || syncBusy;
     $('active').checked = snapshot.active;
     $('startup').checked = snapshot.startAtLogin;
-    $('status').textContent = snapshot.status;
-    syncConnected = snapshot.syncConnected;
+    $('status').textContent = snapshot.libraryError ? `Library could not be opened: ${snapshot.libraryError}. Import a backup to recover it.` : snapshot.status;
+    syncConnected = snapshot.syncConnected && !snapshot.libraryError;
     $('sync').textContent = syncConnected ? 'Sync now' : 'Connect';
     $('replace-cloud').hidden = !syncConnected;
     $('use-other').hidden = !syncConnected;
@@ -198,7 +205,7 @@ async function syncDrive(interactive = false, keepLocal = false, useOther = fals
     if (interactive) notify(errorMessage(error));
   } finally {
     syncBusy = false;
-    $('sync').disabled = false;
+    $('sync').disabled = Boolean(libraryError);
     const next = syncPending;
     syncPending = null;
     if (next && (syncConnected || next[0])) {
@@ -289,6 +296,7 @@ $('use-other').addEventListener('click', async () => {
 $('disconnect-sync').addEventListener('click', async () => {
   menu(false);
   try {
+    syncPending = null;
     await invoke('disconnect_sync');
     await refresh();
     $('sync-status').textContent = 'Not connected';
@@ -299,6 +307,7 @@ $('reset-sync').addEventListener('click', async () => {
   menu(false);
   if (!await ask('Switch Google account?', 'This clears sync history on this device, not your snippets or cloud files. Choose a different Google account on the next connection. Reconnecting the same account may restore old deleted snippets.', 'Reset sync')) return;
   try {
+    syncPending = null;
     await invoke('reset_sync');
     await refresh();
     $('sync-status').textContent = 'Not connected';
@@ -315,7 +324,7 @@ $('form').addEventListener('submit', async event => {
     createdAt: 0, updatedAt: 0
   };
   try {
-    await invoke('save_snippet', { previous, snippet });
+    await invoke('save_snippet', { previous, snippet, expected: originalSnippet });
     await refresh();
     const saved = snippets.find(s => s.trigger.toLocaleLowerCase() === (snippet.trigger.startsWith('!') ? snippet.trigger : `!${snippet.trigger}`).toLocaleLowerCase());
     if (window.innerWidth <= 700) closeEditor();
@@ -328,9 +337,9 @@ $('form').addEventListener('submit', async event => {
   }
 });
 $('delete').addEventListener('click', async () => {
-  if (!selected || !await ask('Delete snippet?', `${selected} will be removed from this device.`, 'Delete')) return;
+  if (!selected || !await ask('Delete snippet?', syncConnected ? `${selected} will be removed from this device and your other devices on their next sync.` : `${selected} will be removed from this device.`, 'Delete')) return;
   try {
-    await invoke('remove_snippet', { trigger: selected });
+    await invoke('remove_snippet', { trigger: selected, expected: originalSnippet });
     closeEditor();
     await refresh();
     notify('Snippet deleted');

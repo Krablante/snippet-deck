@@ -27,13 +27,13 @@ class AddEditSnippetScreenTest {
                     snippet = null,
                     reservedTriggers = emptySet(),
                     initialExpansion = "Hello world",
-                    onSave = { _, _, _ -> },
+                    onSave = { _, _, _, _ -> },
                     onNavigateBack = {}
                 )
             }
         }
 
-        composeTestRule.onAllNodesWithText("Add Snippet").onFirst().assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("New snippet").onFirst().assertIsDisplayed()
         composeTestRule.onNodeWithText("Hello world").assertIsDisplayed()
     }
 
@@ -45,13 +45,13 @@ class AddEditSnippetScreenTest {
                     snippet = null,
                     reservedTriggers = emptySet(),
                     initialExpansion = null,
-                    onSave = { _, _, _ -> },
+                    onSave = { _, _, _, _ -> },
                     onNavigateBack = {}
                 )
             }
         }
 
-        composeTestRule.onAllNodesWithText("Add Snippet").onFirst().assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("New snippet").onFirst().assertIsDisplayed()
         composeTestRule.onNodeWithText("Hello world").assertDoesNotExist()
     }
 
@@ -69,7 +69,7 @@ class AddEditSnippetScreenTest {
                     snippet = snippet,
                     reservedTriggers = emptySet(),
                     initialExpansion = "Should be ignored",
-                    onSave = { _, _, _ -> },
+                    onSave = { _, _, _, _ -> },
                     onNavigateBack = {}
                 )
             }

@@ -159,9 +159,15 @@ fn exchange(form: &str, old_refresh: Option<String>) -> Result<Access, String> {
     if !(200..300).contains(&status) {
         let code = result.get("error").and_then(Value::as_str);
         return Err(match code {
-            Some("invalid_client") => "Google rejected the desktop OAuth client (invalid_client)".into(),
-            Some("invalid_request") => "Google rejected the desktop sign-in request (invalid_request)".into(),
-            Some("invalid_grant") => "Google sign-in expired or was rejected (invalid_grant); try again".into(),
+            Some("invalid_client") => {
+                "Google rejected the desktop OAuth client (invalid_client)".into()
+            }
+            Some("invalid_request") => {
+                "Google rejected the desktop sign-in request (invalid_request)".into()
+            }
+            Some("invalid_grant") => {
+                "Google sign-in expired or was rejected (invalid_grant); try again".into()
+            }
             _ => format!("Google sign-in failed (HTTP {status})"),
         });
     }
@@ -208,6 +214,13 @@ pub struct RemoteFile {
     pub id: String,
     pub name: String,
     pub size: u64,
+    pub version: Option<String>,
+}
+
+impl RemoteFile {
+    pub fn needs_download(&self, seen: &std::collections::BTreeMap<String, String>) -> bool {
+        self.version.is_none() || seen.get(&self.id) != self.version.as_ref()
+    }
 }
 
 pub struct Drive {
@@ -247,7 +260,7 @@ impl Drive {
                     "q",
                     "name contains 'snippetdeck-sync-v1-' and trashed = false",
                 )
-                .append_pair("fields", "nextPageToken,files(id,name,size)")
+                .append_pair("fields", "nextPageToken,files(id,name,size,version)")
                 .append_pair("pageSize", "100");
             if let Some(page) = &next {
                 url.query_pairs_mut().append_pair("pageToken", page);
@@ -258,8 +271,12 @@ impl Drive {
                 .as_array()
                 .ok_or("Invalid Google Drive listing")?
             {
-                let Some(name) = item["name"].as_str() else { continue };
-                let Some(id) = item["id"].as_str() else { continue };
+                let Some(name) = item["name"].as_str() else {
+                    continue;
+                };
+                let Some(id) = item["id"].as_str() else {
+                    continue;
+                };
                 if name.starts_with("snippetdeck-sync-v1-") && name.ends_with(".json") {
                     files.push(RemoteFile {
                         id: id.to_owned(),
@@ -268,6 +285,10 @@ impl Drive {
                             .as_str()
                             .and_then(|s| s.parse().ok())
                             .unwrap_or(0),
+                        version: item["version"]
+                            .as_str()
+                            .filter(|s| !s.is_empty())
+                            .map(str::to_owned),
                     });
                 }
             }

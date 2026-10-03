@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -41,7 +42,7 @@ class CreateShortcutIntentTest {
     }
 
     @Test
-    fun processTextLaunch_prefillsExpansionOnAddSnippetScreen() {
+    fun processTextLaunch_prefillsAndPreservesDraftOnRecreation() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
 
         val intent = Intent(Intent.ACTION_PROCESS_TEXT).apply {
@@ -50,9 +51,12 @@ class CreateShortcutIntentTest {
             putExtra(Intent.EXTRA_PROCESS_TEXT, "my selected text")
         }
 
-        ActivityScenario.launch<MainActivity>(intent).use {
-            composeTestRule.onAllNodesWithText("Add Snippet").onFirst().assertIsDisplayed()
+        ActivityScenario.launch<MainActivity>(intent).use { scenario ->
+            composeTestRule.onAllNodesWithText("New snippet").onFirst().assertIsDisplayed()
             composeTestRule.onNodeWithText("my selected text").assertIsDisplayed()
+            composeTestRule.onNodeWithText("my selected text").performTextReplacement("My unsaved draft")
+            scenario.recreate()
+            composeTestRule.onNodeWithText("My unsaved draft").assertIsDisplayed()
         }
     }
 }

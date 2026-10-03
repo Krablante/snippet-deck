@@ -1,4 +1,4 @@
-use crate::library::Snippet;
+use crate::library::{trigger_key, Snippet};
 use chrono::{Datelike, Local};
 use enigo::{Direction, Enigo, Key as OutKey, Keyboard, Settings};
 use rdev::{Event, EventType, Key};
@@ -77,7 +77,7 @@ impl Matcher {
         let mut triggers = HashMap::new();
         for (index, snippet) in snippets.iter().enumerate().filter(|(_, s)| s.enabled) {
             for trigger in std::iter::once(&snippet.trigger).chain(snippet.aliases.iter()) {
-                triggers.insert(trigger.to_lowercase(), index);
+                triggers.insert(trigger_key(trigger), index);
             }
         }
         Self { snippets, triggers }
@@ -96,6 +96,7 @@ fn mac_accessibility_allowed() -> bool {
 #[derive(Default)]
 struct InputState {
     word: String,
+    word_overflow: bool,
     modifier: u8,
     pending: Option<(String, String)>,
     pending_undo: Option<(String, String)>,
@@ -105,13 +106,28 @@ struct InputState {
 impl InputState {
     fn accept(&mut self, event: Event, state: &Arc<Expander>) {
         if state.injecting.load(Ordering::Relaxed) {
+            // Mouse clicks are physical: insertion never synthesizes them.
+            if matches!(event.event_type, EventType::ButtonPress(_)) {
+                self.word.clear();
+                self.word_overflow = false;
+                self.pending = None;
+                self.pending_undo = None;
+                self.undo = None;
+            }
             return;
+        }
+        // Keep physical modifier state even while the editor or pause suppresses expansion.
+        match event.event_type {
+            EventType::KeyPress(key) => self.modifier |= modifier_bit(key),
+            EventType::KeyRelease(key) => self.modifier &= !modifier_bit(key),
+            _ => {}
         }
         if !state.enabled.load(Ordering::Relaxed)
             || state.editor_focused.load(Ordering::Relaxed)
             || state.dialog_open.load(Ordering::Relaxed)
         {
             self.word.clear();
+            self.word_overflow = false;
             self.pending = None;
             self.pending_undo = None;
             self.undo = None;
@@ -120,15 +136,17 @@ impl InputState {
         match event.event_type {
             EventType::ButtonPress(_) => {
                 self.word.clear();
+                self.word_overflow = false;
                 self.pending = None;
                 self.pending_undo = None;
                 self.undo = None;
             }
             EventType::KeyPress(key) => {
+                if !matches!(key, Key::ShiftLeft | Key::ShiftRight) {
+                    self.pending = None;
+                    self.pending_undo = None;
+                }
                 match key {
-                    Key::ControlLeft | Key::ControlRight => self.modifier |= 1,
-                    Key::Alt | Key::AltGr => self.modifier |= 2,
-                    Key::MetaLeft | Key::MetaRight => self.modifier |= 4,
                     Key::ShiftLeft | Key::ShiftRight => {}
                     Key::Backspace if self.modifier == 0 => {
                         if let Some((trigger, expanded)) = self.undo.take() {
@@ -141,10 +159,12 @@ impl InputState {
                     Key::Space if self.modifier == 0 => {
                         self.pending = self.match_word(state);
                         self.word.clear();
+                        self.word_overflow = false;
                         self.undo = None;
                     }
                     _ if self.modifier != 0 => {
                         self.word.clear();
+                        self.word_overflow = false;
                         self.pending = None;
                         self.pending_undo = None;
                         self.undo = None;
@@ -158,13 +178,18 @@ impl InputState {
                                         .chars()
                                         .all(|c| !c.is_control() && !c.is_whitespace()) =>
                             {
+                                if self.word_overflow {
+                                    return;
+                                }
                                 self.word.push_str(text);
                                 if self.word.chars().count() > 40 {
                                     self.word.clear();
+                                    self.word_overflow = true;
                                 }
                             }
                             _ => {
                                 self.word.clear();
+                                self.word_overflow = false;
                                 self.pending = None;
                             }
                         }
@@ -185,12 +210,6 @@ impl InputState {
                     self.word = trigger;
                 }
             }
-            EventType::KeyRelease(key) => match key {
-                Key::ControlLeft | Key::ControlRight => self.modifier &= !1,
-                Key::Alt | Key::AltGr => self.modifier &= !2,
-                Key::MetaLeft | Key::MetaRight => self.modifier &= !4,
-                _ => {}
-            },
             _ => {}
         }
     }
@@ -234,7 +253,7 @@ impl InputState {
         }
         matcher
             .triggers
-            .get(&self.word.to_lowercase())
+            .get(&trigger_key(&self.word))
             .map(|&index| (self.word.clone(), matcher.snippets[index].expansion.clone()))
     }
 
@@ -314,6 +333,18 @@ impl InputState {
             }
         });
         true
+    }
+}
+
+fn modifier_bit(key: Key) -> u8 {
+    match key {
+        Key::ControlLeft => 1,
+        Key::ControlRight => 2,
+        Key::Alt => 4,
+        Key::AltGr => 8,
+        Key::MetaLeft => 16,
+        Key::MetaRight => 32,
+        _ => 0,
     }
 }
 
@@ -425,7 +456,12 @@ fn java_date_pattern(pattern: &str) -> Option<String> {
     let mut quoted = false;
     while let Some(c) = chars.next() {
         if c == '\'' {
-            quoted = !quoted;
+            if chars.peek() == Some(&'\'') {
+                chars.next();
+                output.push('\'');
+            } else {
+                quoted = !quoted;
+            }
             continue;
         }
         if quoted || !c.is_ascii_alphabetic() {
@@ -468,5 +504,87 @@ fn java_date_pattern(pattern: &str) -> Option<String> {
         None
     } else {
         Some(output)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn custom_patterns_keep_literal_apostrophes_and_unknown_tokens() {
+        assert_eq!(java_date_pattern("yyyy 'o''clock'").unwrap(), "%Y o'clock");
+        assert!(java_date_pattern("unsupported").is_none());
+        assert_eq!(placeholders("{{date:unsupported}}"), "{{date:unsupported}}");
+    }
+
+    fn event(kind: EventType, text: Option<&str>) -> Event {
+        Event {
+            time: std::time::SystemTime::now(),
+            event_type: kind,
+            name: text.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn oversized_words_do_not_match_their_tail() {
+        let state = Arc::new(Expander::new(Vec::new()));
+        let mut input = InputState::default();
+        for _ in 0..41 {
+            input.accept(event(EventType::KeyPress(Key::KeyA), Some("a")), &state);
+        }
+        for c in ["!", "h", "e", "l", "p"] {
+            input.accept(event(EventType::KeyPress(Key::KeyA), Some(c)), &state);
+        }
+        input.accept(event(EventType::KeyPress(Key::Space), Some(" ")), &state);
+        assert!(input.pending.is_none());
+        assert!(!input.word_overflow);
+    }
+
+    #[test]
+    fn modifiers_are_tracked_while_editor_suppresses_expansion() {
+        let state = Arc::new(Expander::new(Vec::new()));
+        let mut input = InputState::default();
+        input.accept(event(EventType::KeyPress(Key::ControlLeft), None), &state);
+        input.accept(event(EventType::KeyPress(Key::ControlRight), None), &state);
+        input.accept(event(EventType::KeyRelease(Key::ControlLeft), None), &state);
+        assert_ne!(input.modifier, 0);
+        state.editor_focused.store(true, Ordering::Relaxed);
+        input.accept(
+            event(EventType::KeyRelease(Key::ControlRight), None),
+            &state,
+        );
+        state.editor_focused.store(false, Ordering::Relaxed);
+        assert_eq!(input.modifier, 0);
+        input.accept(event(EventType::KeyPress(Key::KeyA), Some("a")), &state);
+        assert_eq!(input.word, "a");
+    }
+
+    #[test]
+    fn typing_before_space_release_cancels_pending_expansion() {
+        let state = Arc::new(Expander::new(Vec::new()));
+        let mut input = InputState {
+            word: "!help".into(),
+            ..InputState::default()
+        };
+        input.accept(event(EventType::KeyPress(Key::Space), Some(" ")), &state);
+        assert!(input.pending.is_some());
+        input.accept(event(EventType::KeyPress(Key::KeyA), Some("a")), &state);
+        assert!(input.pending.is_none());
+    }
+
+    #[test]
+    fn clicking_during_insertion_invalidates_undo_in_the_old_field() {
+        let state = Arc::new(Expander::new(Vec::new()));
+        state.injecting.store(true, Ordering::Relaxed);
+        let mut input = InputState {
+            undo: Some(("!old".into(), "Expanded".into())),
+            ..InputState::default()
+        };
+        input.accept(
+            event(EventType::ButtonPress(rdev::Button::Left), None),
+            &state,
+        );
+        assert!(input.undo.is_none());
     }
 }

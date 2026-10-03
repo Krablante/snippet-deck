@@ -12,7 +12,9 @@ import java.nio.charset.StandardCharsets
 internal class GoogleDriveSync(private val accessToken: String) {
     private val gson = Gson()
 
-    data class RemoteFile(val id: String, val name: String, val size: Long)
+    data class RemoteFile(val id: String, val name: String, val size: Long, val version: String?) {
+        fun needsDownload(seen: Map<String, String>): Boolean = version == null || seen[id] != version
+    }
 
     fun accountId(): String {
         val root = JsonParser.parseString(get("$API/about?fields=user(permissionId)")).asJsonObject
@@ -26,7 +28,7 @@ internal class GoogleDriveSync(private val accessToken: String) {
         do {
             val query = "name contains 'snippetdeck-sync-v1-' and trashed = false"
             val url = "$API/files?spaces=appDataFolder&q=${encoded(query)}" +
-                "&fields=nextPageToken,files(id,name,size)&pageSize=100" +
+                "&fields=nextPageToken,files(id,name,size,version)&pageSize=100" +
                 (pageToken?.let { "&pageToken=${encoded(it)}" } ?: "")
             val root = JsonParser.parseString(get(url)).asJsonObject
             root.getAsJsonArray("files")?.forEach { element ->
@@ -34,7 +36,8 @@ internal class GoogleDriveSync(private val accessToken: String) {
                 val name = item.get("name").asString
                 if (name.matches(Regex("snippetdeck-sync-v1-[0-9a-f-]{36}\\.json"))) {
                     files += RemoteFile(item.get("id").asString, name,
-                        item.get("size")?.asLong ?: 0)
+                        item.get("size")?.asLong ?: 0,
+                        item.get("version")?.takeUnless { it.isJsonNull }?.asString?.takeIf(String::isNotBlank))
                 }
             }
             require(files.size <= 50) { "Too many SnippetDeck devices in this Drive" }
