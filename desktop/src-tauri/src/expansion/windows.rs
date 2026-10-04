@@ -176,7 +176,7 @@ impl Listener {
                 4,
                 Some(layout),
             );
-            if count > 0 {
+            if count > 0 && count as usize <= buffer.len() {
                 String::from_utf16(&buffer[..count as usize]).ok()
             } else {
                 None
@@ -405,7 +405,9 @@ mod tests {
                     .set_read_timeout(Some(Duration::from_secs(10)))
                     .unwrap();
             }
-            browser.call("Runtime.evaluate", json!({"expression": "document.title='SnippetDeck input check'; document.body.innerHTML='<textarea id=t style=width:500px;height:200px></textarea><div id=e contenteditable=true style=width:500px;height:200px;border:1px solid></div>'; window.submits=0; document.addEventListener('keydown',e=>{if(e.key===\"Enter\"&&!e.shiftKey){window.submits++;e.preventDefault()}})"}));
+            // Text editors preserve whitespace. An unstyled HTML div normalizes
+            // adjacent spaces even during ordinary typing, before expansion runs.
+            browser.call("Runtime.evaluate", json!({"expression": "document.title='SnippetDeck input check'; document.body.innerHTML='<textarea id=t style=width:500px;height:200px></textarea><div id=e contenteditable=true style=width:500px;height:200px;border:1px solid;white-space:pre-wrap></div>'; window.submits=0; document.addEventListener('keydown',e=>{if(e.key===\"Enter\"&&!e.shiftKey){window.submits++;e.preventDefault()}})"}));
             browser.call("Page.bringToFront", json!({}));
             browser
         }

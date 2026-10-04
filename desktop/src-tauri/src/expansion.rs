@@ -24,6 +24,7 @@ pub struct Expander {
     pub enabled: AtomicBool,
     pub editor_focused: AtomicBool,
     pub dialog_open: AtomicBool,
+    #[cfg(any(not(target_os = "windows"), test))]
     pub injecting: AtomicBool,
     pub status: RwLock<String>,
     input_revision: AtomicU64,
@@ -37,6 +38,7 @@ impl Expander {
             enabled: AtomicBool::new(true),
             editor_focused: AtomicBool::new(false),
             dialog_open: AtomicBool::new(false),
+            #[cfg(any(not(target_os = "windows"), test))]
             injecting: AtomicBool::new(false),
             status: RwLock::new("Starting…".into()),
             input_revision: AtomicU64::new(0),
