@@ -410,7 +410,16 @@ mod tests {
             }
             // Text editors preserve whitespace. An unstyled HTML div normalizes
             // adjacent spaces even during ordinary typing, before expansion runs.
-            browser.call("Runtime.evaluate", json!({"expression": "document.title='SnippetDeck input check'; document.body.innerHTML='<textarea id=t style=width:500px;height:200px></textarea><div id=e contenteditable=true style=width:500px;height:200px;border:1px solid;white-space:pre-wrap></div>'; window.submits=0; document.addEventListener('keydown',e=>{if(e.key===\"Enter\"&&!e.shiftKey){window.submits++;e.preventDefault()}})"}));
+            browser.call("Runtime.evaluate", json!({"expression": r#"
+                document.title='SnippetDeck input check';
+                document.body.innerHTML='<textarea id=t style="width:500px;height:200px"></textarea><div id=e contenteditable=true style="width:500px;height:200px;border:1px solid;white-space:pre-wrap"></div>';
+                window.submits=0;
+                document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){window.submits++;e.preventDefault()}});
+            "#}));
+            assert_eq!(
+                browser.evaluate("getComputedStyle(document.getElementById('e')).whiteSpace"),
+                "pre-wrap"
+            );
             browser.activate();
             browser
         }
@@ -589,6 +598,7 @@ mod tests {
         let mut browser = Browser::open();
         let window = browser.activate();
         let multiline = "Первая строка\nSecond 😀 line";
+        let long_line = "Long single line. ".repeat(64);
         let state = Arc::new(Expander::new(vec![
             Snippet {
                 trigger: "!test".into(),
@@ -602,6 +612,14 @@ mod tests {
                 trigger: "!single".into(),
                 aliases: vec!["ss".into()],
                 expansion: "Текст 😀".into(),
+                enabled: true,
+                created_at: 0,
+                updated_at: 0,
+            },
+            Snippet {
+                trigger: "!long".into(),
+                aliases: vec!["ll".into()],
+                expansion: long_line.clone(),
                 enabled: true,
                 created_at: 0,
                 updated_at: 0,
@@ -638,6 +656,9 @@ mod tests {
         browser.field("t", "Before ", " AFTER");
         physical(&[VK_S, VK_S, VK_SPACE]);
         browser.expect("t", "Before Текст 😀 AFTER");
+        browser.field("t", "Before ", " AFTER");
+        physical(&[VK_L, VK_L, VK_SPACE]);
+        browser.expect("t", &format!("Before {long_line} AFTER"));
         browser.field("t", "Before ", " AFTER");
         for count in 1..=3 {
             physical(&[VK_R, VK_V, VK_SPACE]);

@@ -56,7 +56,7 @@ Immediate Backspace restores the typed trigger at its original cursor location w
 
 The desktop Rust agent keeps a short trigger buffer and a lookup table rebuilt only when the library changes. On Windows, native low-level hooks discard only SnippetDeck's marked input events, leaving real typing and modifiers visible. They translate typed characters using the foreground keyboard layout without attaching input queues. Each replacement is one `SendInput` batch; clipboard paste uses the virtual V key, independent of the input language. macOS and Linux X11 use `rdev` and `enigo`; X11 uses the fast `libxdo` backend. Wayland expansion is disabled.
 
-One worker serializes insertions. A pending replacement is discarded if new input makes its trigger range stale; Windows also checks the foreground window and held modifiers before dispatch. Text containing line breaks or tabs is pasted so Enter cannot submit the field and Tab cannot change focus. Consecutive pastes share the original clipboard snapshot, restored after a short idle period unless the user copied other content. Clipboard restoration does not block subsequent replacements. Desktop Backspace remains an ordinary editor action: the agent cannot verify pasted text and must never erase an assumed expansion length. Users undo through the target editor.
+One worker serializes insertions. A pending replacement is discarded if new input makes its trigger range stale; Windows also checks the foreground window and held modifiers before dispatch. Text containing line breaks or tabs is pasted so Enter cannot submit the field and Tab cannot change focus. Windows also pastes text longer than 256 UTF-8 bytes, bounding native input allocation and event count. Consecutive pastes share the original clipboard snapshot, restored after a short idle period unless the user copied other content. Clipboard restoration does not block subsequent replacements. Desktop Backspace remains an ordinary editor action: the agent cannot verify pasted text and must never erase an assumed expansion length. Users undo through the target editor.
 
 The agent does not inspect or persist the entire target field. Mouse clicks, navigation and shortcuts clear its trigger buffer. The editor is a Tauri WebView that can close while the agent stays in the tray, releasing the WebView process when it is not needed.
 
@@ -134,7 +134,7 @@ The desktop Rust `update.rs` checks the same latest stable release once at start
 ## Security and privacy boundaries
 
 - Android and desktop check public GitHub release metadata and download an installer only after approval. The optional sync flow contacts Google OAuth and Drive.
-- Multiline desktop insertion briefly exposes snippet text to the local system clipboard. Clipboard managers may retain it; this is not a channel for secrets.
+- Clipboard-based desktop insertion briefly exposes snippet text to the local system clipboard. Clipboard managers may retain it; this is not a channel for secrets.
 - Snippets, observed text, settings, and backups are never sent with GitHub update requests. Only user-created snippets and sync metadata go to Drive after connecting; observed typing is never sent.
 - There is no background network worker, polling process, backend, or silent installation.
 - Observed editable text is not persisted or transmitted.

@@ -303,6 +303,12 @@ impl Insertion {
 }
 
 fn needs_paste(text: &str) -> bool {
+    // A Windows INPUT occupies 40 bytes on x64. A large native Unicode batch
+    // would allocate tens of MB and flood the target with per-character events.
+    #[cfg(target_os = "windows")]
+    if text.len() > 256 {
+        return true;
+    }
     // Native Tab/Enter events can move focus or submit the target editor.
     text.contains(['\n', '\r', '\t'])
 }
@@ -716,5 +722,6 @@ mod tests {
         assert_ne!(input.modifier, 0);
         input.accept(event(EventType::KeyRelease(Key::ControlLeft), None), &state);
         assert_eq!(input.modifier, 0);
+        assert!(needs_paste(&"x".repeat(257)));
     }
 }
