@@ -14,7 +14,7 @@ On Android, Google Play services handles authorization. On desktop, the app open
 
 Android's system backup and device transfer can include your local library and appearance settings when enabled in your device's backup settings. The operating system and its backup provider handle that copy separately from SnippetDeck's optional Drive sync. Sync identities and tokens are excluded from the app's system backup.
 
-On Android and desktop, SnippetDeck contacts GitHub to check public release metadata and downloads an installer only with your approval. No snippet content is included in update requests. Manual file and clipboard backups contain your snippets and go only where you choose to save or paste them. Desktop multiline insertion temporarily uses the system clipboard; local clipboard managers may retain that text.
+On Android and desktop, SnippetDeck contacts GitHub to check public release metadata and downloads an installer only with your approval. No snippet content is included in update requests. Manual file and clipboard backups contain your snippets and go only where you choose to save or paste them. Desktop insertion of text containing line breaks or tabs temporarily uses the system clipboard; local clipboard managers may retain that text.
 
 There is no analytics, advertising, SnippetDeck account, or SnippetDeck backend. For questions or privacy requests, open a [GitHub issue](https://github.com/Krablante/snippet-deck/issues).
 

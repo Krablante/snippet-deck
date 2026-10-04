@@ -15,7 +15,7 @@
 
 <p align="center"><a href="README.md"><img src="https://img.shields.io/badge/Language-EN-505477" alt="English"></a> <a href="docs/ru/README.md"><img src="https://img.shields.io/badge/Language-RU-714857" alt="Русский"></a></p>
 
-Type `!review` and press Space: SnippetDeck replaces the trigger before your cursor with its saved expansion. Text after the cursor stays put. Add aliases, use date and time placeholders, or press Backspace immediately after an expansion to restore the trigger where the target app supports it.
+Type `!review` and press Space: SnippetDeck replaces the trigger before your cursor with its saved expansion. Text after the cursor stays put. Add aliases and use date and time placeholders. On Android, an immediate Backspace can restore the trigger where the target app supports it; on desktop, use the target editor's Undo command.
 
 ## See it
 

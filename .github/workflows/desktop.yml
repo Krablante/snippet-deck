@@ -61,6 +61,9 @@ jobs:
         run: |
           cargo test --locked
           npx --yes @tauri-apps/cli@2.11.5 build --bundles ${{ matrix.bundle }} --ci --no-sign -- --locked
+      - name: Check Windows browser expansion
+        if: runner.os == 'Windows'
+        run: cargo test --locked windows_browser_replacements -- --ignored --nocapture --test-threads=1
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:

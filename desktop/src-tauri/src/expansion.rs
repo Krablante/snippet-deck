@@ -1,17 +1,23 @@
 use crate::library::{trigger_key, Snippet};
 use chrono::{Datelike, Local};
+#[cfg(not(target_os = "windows"))]
 use enigo::{Direction, Enigo, Key as OutKey, Keyboard, Settings};
 use rdev::{Event, EventType, Key};
 use std::{
     collections::HashMap,
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        mpsc::{self, Receiver, RecvTimeoutError, Sender},
         Arc, Mutex, RwLock,
     },
     thread,
     time::Duration,
 };
+
+#[cfg(target_os = "windows")]
+#[path = "expansion/windows.rs"]
+mod windows;
 
 pub struct Expander {
     snippets: RwLock<Matcher>,
@@ -20,7 +26,8 @@ pub struct Expander {
     pub dialog_open: AtomicBool,
     pub injecting: AtomicBool,
     pub status: RwLock<String>,
-    clipboard: Mutex<Option<arboard::Clipboard>>,
+    input_revision: AtomicU64,
+    insertions: Mutex<Option<Sender<Insertion>>>,
 }
 
 impl Expander {
@@ -32,7 +39,8 @@ impl Expander {
             dialog_open: AtomicBool::new(false),
             injecting: AtomicBool::new(false),
             status: RwLock::new("Starting…".into()),
-            clipboard: Mutex::new(None),
+            input_revision: AtomicU64::new(0),
+            insertions: Mutex::new(None),
         }
     }
 
@@ -41,6 +49,10 @@ impl Expander {
     }
 
     pub fn start(self: &Arc<Self>) {
+        let (sender, receiver) = mpsc::channel();
+        *self.insertions.lock().unwrap() = Some(sender);
+        let worker_state = Arc::clone(self);
+        thread::spawn(move || insertion_worker(worker_state, receiver));
         let state = Arc::clone(self);
         thread::spawn(move || {
             #[cfg(target_os = "macos")]
@@ -59,7 +71,11 @@ impl Expander {
             *state.status.write().unwrap() = "Ready · type a trigger, then Space".into();
             let mut input = InputState::default();
             let listener_state = Arc::clone(&state);
-            if let Err(error) = rdev::listen(move |event| input.accept(event, &listener_state)) {
+            #[cfg(target_os = "windows")]
+            let result = windows::listen(move |event| input.accept(event, &listener_state));
+            #[cfg(not(target_os = "windows"))]
+            let result = rdev::listen(move |event| input.accept(event, &listener_state));
+            if let Err(error) = result {
                 eprintln!("Keyboard listener failed: {error:?}");
                 *state.status.write().unwrap() = format!("Input monitoring unavailable: {error:?}");
             }
@@ -99,22 +115,28 @@ struct InputState {
     word_overflow: bool,
     modifier: u8,
     pending: Option<(String, String)>,
-    pending_undo: Option<(String, String)>,
-    undo: Option<(String, String)>,
 }
 
 impl InputState {
     fn accept(&mut self, event: Event, state: &Arc<Expander>) {
+        // Windows filters our marked events in its hook, before text translation.
+        // Real typing remains visible while a clipboard restore is pending.
+        #[cfg(not(target_os = "windows"))]
         if state.injecting.load(Ordering::Relaxed) {
             // Mouse clicks are physical: insertion never synthesizes them.
             if matches!(event.event_type, EventType::ButtonPress(_)) {
                 self.word.clear();
                 self.word_overflow = false;
                 self.pending = None;
-                self.pending_undo = None;
-                self.undo = None;
             }
             return;
+        }
+        if matches!(
+            event.event_type,
+            EventType::KeyPress(_) | EventType::ButtonPress(_)
+        ) || matches!(event.event_type, EventType::KeyRelease(key) if modifier_bit(key) != 0 || matches!(key, Key::ShiftLeft | Key::ShiftRight))
+        {
+            state.input_revision.fetch_add(1, Ordering::SeqCst);
         }
         // Keep physical modifier state even while the editor or pause suppresses expansion.
         match event.event_type {
@@ -129,8 +151,6 @@ impl InputState {
             self.word.clear();
             self.word_overflow = false;
             self.pending = None;
-            self.pending_undo = None;
-            self.undo = None;
             return;
         }
         match event.event_type {
@@ -138,76 +158,52 @@ impl InputState {
                 self.word.clear();
                 self.word_overflow = false;
                 self.pending = None;
-                self.pending_undo = None;
-                self.undo = None;
             }
             EventType::KeyPress(key) => {
                 if !matches!(key, Key::ShiftLeft | Key::ShiftRight) {
                     self.pending = None;
-                    self.pending_undo = None;
                 }
                 match key {
                     Key::ShiftLeft | Key::ShiftRight => {}
                     Key::Backspace if self.modifier == 0 => {
-                        if let Some((trigger, expanded)) = self.undo.take() {
-                            // Wait for the user's Backspace to reach the target field.
-                            self.pending_undo = Some((trigger, expanded));
-                        } else {
-                            self.word.pop();
-                        }
+                        self.word.pop();
                     }
                     Key::Space if self.modifier == 0 => {
                         self.pending = self.match_word(state);
                         self.word.clear();
                         self.word_overflow = false;
-                        self.undo = None;
                     }
                     _ if self.modifier != 0 => {
                         self.word.clear();
                         self.word_overflow = false;
                         self.pending = None;
-                        self.pending_undo = None;
-                        self.undo = None;
                     }
-                    _ => {
-                        self.undo = None;
-                        match event.name.as_deref() {
-                            Some(text)
-                                if !text.is_empty()
-                                    && text
-                                        .chars()
-                                        .all(|c| !c.is_control() && !c.is_whitespace()) =>
-                            {
-                                if self.word_overflow {
-                                    return;
-                                }
-                                self.word.push_str(text);
-                                if self.word.chars().count() > 40 {
-                                    self.word.clear();
-                                    self.word_overflow = true;
-                                }
+                    _ => match event.name.as_deref() {
+                        Some(text)
+                            if !text.is_empty()
+                                && text.chars().all(|c| !c.is_control() && !c.is_whitespace()) =>
+                        {
+                            if self.word_overflow {
+                                return;
                             }
-                            _ => {
+                            self.word.push_str(text);
+                            if self.word.chars().count() > 40 {
                                 self.word.clear();
-                                self.word_overflow = false;
-                                self.pending = None;
+                                self.word_overflow = true;
                             }
                         }
-                    }
+                        _ => {
+                            self.word.clear();
+                            self.word_overflow = false;
+                            self.pending = None;
+                        }
+                    },
                 }
             }
             EventType::KeyRelease(Key::Space) => {
                 if let Some((trigger, text)) = self.pending.take() {
                     let expanded = placeholders(&text);
-                    if self.inject(state, trigger.chars().count() + 1, &expanded) {
-                        self.undo = Some((trigger, expanded));
-                    }
-                }
-            }
-            EventType::KeyRelease(Key::Backspace) => {
-                if let Some((trigger, expanded)) = self.pending_undo.take() {
-                    self.inject(state, expanded.chars().count().saturating_sub(1), &trigger);
-                    self.word = trigger;
+                    self.inject(state, trigger.chars().count() + 1, &expanded);
                 }
             }
             _ => {}
@@ -257,83 +253,164 @@ impl InputState {
             .map(|&index| (self.word.clone(), matcher.snippets[index].expansion.clone()))
     }
 
-    fn inject(&self, state: &Arc<Expander>, remove: usize, text: &str) -> bool {
-        let multiline = text.contains('\n') || text.contains('\r');
-        let saved_clipboard = if multiline {
-            match ClipboardSnapshot::capture() {
-                Ok(snapshot) => Some(snapshot),
-                Err(error) => {
-                    *state.status.write().unwrap() = error;
-                    return false;
+    fn inject(&self, state: &Arc<Expander>, remove: usize, text: &str) {
+        let insertion = Insertion {
+            remove,
+            text: text.to_owned(),
+            revision: state.input_revision.load(Ordering::SeqCst),
+            #[cfg(target_os = "windows")]
+            window: windows::foreground(),
+        };
+        if state
+            .insertions
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_none_or(|sender| sender.send(insertion).is_err())
+        {
+            *state.status.write().unwrap() = "Input worker unavailable".into();
+        }
+    }
+}
+
+struct Insertion {
+    remove: usize,
+    text: String,
+    revision: u64,
+    #[cfg(target_os = "windows")]
+    window: usize,
+}
+
+impl Insertion {
+    fn current(&self, state: &Expander) -> bool {
+        state.input_revision.load(Ordering::SeqCst) == self.revision
+            && state.enabled.load(Ordering::Relaxed)
+            && !state.editor_focused.load(Ordering::Relaxed)
+            && !state.dialog_open.load(Ordering::Relaxed)
+            && {
+                #[cfg(target_os = "windows")]
+                {
+                    windows::ready(self.window)
                 }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    true
+                }
+            }
+    }
+}
+
+fn needs_paste(text: &str) -> bool {
+    // Native Tab/Enter events can move focus or submit the target editor.
+    text.contains(['\n', '\r', '\t'])
+}
+
+fn insertion_worker(state: Arc<Expander>, receiver: Receiver<Insertion>) {
+    let mut clipboard: Option<arboard::Clipboard> = None;
+    let mut saved: Option<ClipboardSnapshot> = None;
+    let mut pasted = String::new();
+    loop {
+        let request = if saved.is_some() {
+            match receiver.recv_timeout(Duration::from_millis(400)) {
+                Ok(request) => Some(request),
+                Err(RecvTimeoutError::Timeout) => None,
+                Err(RecvTimeoutError::Disconnected) => break,
             }
         } else {
-            None
-        };
-        state.injecting.store(true, Ordering::Relaxed);
-        let state = Arc::clone(state);
-        let text = text.to_owned();
-        thread::spawn(move || {
-            let result = (|| {
-                let mut keyboard = Enigo::new(&Settings {
-                    linux_delay: 0,
-                    ..Settings::default()
-                })
-                .map_err(|e| format!("Input unavailable: {e:?}"))?;
-                if multiline {
-                    let mut clipboard_guard = state.clipboard.lock().unwrap();
-                    if clipboard_guard.is_none() {
-                        *clipboard_guard = Some(
-                            arboard::Clipboard::new()
-                                .map_err(|e| format!("Clipboard unavailable: {e}"))?,
-                        );
-                    }
-                    let clipboard = clipboard_guard.as_mut().unwrap();
-                    clipboard
-                        .set_text(&text)
-                        .map_err(|e| format!("Cannot prepare paste: {e}"))?;
-                    let paste_result = (|| {
-                        erase_trigger(&mut keyboard, remove)?;
-                        #[cfg(target_os = "macos")]
-                        let modifier = OutKey::Meta;
-                        #[cfg(not(target_os = "macos"))]
-                        let modifier = OutKey::Control;
-                        keyboard
-                            .key(modifier, Direction::Press)
-                            .map_err(|e| format!("Paste failed: {e:?}"))?;
-                        let paste = keyboard.key(OutKey::Unicode('v'), Direction::Click);
-                        let release = keyboard.key(modifier, Direction::Release);
-                        paste.map_err(|e| format!("Paste failed: {e:?}"))?;
-                        release.map_err(|e| format!("Paste failed: {e:?}"))?;
-                        Ok::<(), String>(())
-                    })();
-                    if paste_result.is_ok() {
-                        thread::sleep(Duration::from_millis(400));
-                    }
-                    if clipboard.get_text().is_ok_and(|current| current == text) {
-                        if let Some(saved) = &saved_clipboard {
-                            saved.restore(clipboard)?;
-                        }
-                    }
-                    paste_result?;
-                } else {
-                    erase_trigger(&mut keyboard, remove)?;
-                    keyboard
-                        .text(&text)
-                        .map_err(|e| format!("Text insertion failed: {e:?}"))?;
-                }
-                Ok::<(), String>(())
-            })();
-            // Let the listener discard the synthetic events before accepting typing again.
-            thread::sleep(Duration::from_millis(120));
-            state.injecting.store(false, Ordering::Relaxed);
-            if let Err(message) = result {
-                eprintln!("{message}");
-                *state.status.write().unwrap() = message;
+            match receiver.recv() {
+                Ok(request) => Some(request),
+                Err(_) => break,
             }
-        });
-        true
+        };
+        let Some(request) = request else {
+            if let (Some(clipboard), Some(snapshot)) = (clipboard.as_mut(), saved.take()) {
+                if clipboard.get_text().is_ok_and(|current| current == pasted) {
+                    if let Err(message) = snapshot.restore(clipboard) {
+                        *state.status.write().unwrap() = message;
+                    }
+                }
+            }
+            continue;
+        };
+        if !request.current(&state) {
+            continue;
+        }
+        let result = (|| {
+            let paste = needs_paste(&request.text);
+            if paste {
+                if clipboard.is_none() {
+                    clipboard = Some(
+                        arboard::Clipboard::new()
+                            .map_err(|e| format!("Clipboard unavailable: {e}"))?,
+                    );
+                }
+                let clipboard = clipboard.as_mut().unwrap();
+                // Consecutive pastes share the original snapshot. A user's intervening
+                // copy becomes the new baseline and must never be overwritten later.
+                if saved.is_none() || !clipboard.get_text().is_ok_and(|current| current == pasted) {
+                    saved = Some(ClipboardSnapshot::capture(clipboard)?);
+                }
+                clipboard
+                    .set_text(&request.text)
+                    .map_err(|e| format!("Cannot prepare paste: {e}"))?;
+                pasted.clone_from(&request.text);
+            }
+            // Clipboard access may take time. Never erase a range after new typing,
+            // a click, a shortcut or a foreground-window change made it stale.
+            if !request.current(&state) {
+                return Ok(());
+            }
+            #[cfg(target_os = "windows")]
+            windows::replace(request.remove, &request.text, paste)?;
+            #[cfg(not(target_os = "windows"))]
+            {
+                state.injecting.store(true, Ordering::Relaxed);
+                let result = native_replace(request.remove, &request.text, paste);
+                // rdev on these platforms has no per-event marker in its public API.
+                thread::sleep(Duration::from_millis(120));
+                state.injecting.store(false, Ordering::Relaxed);
+                result?;
+            }
+            Ok::<(), String>(())
+        })();
+        if let Err(message) = result {
+            eprintln!("{message}");
+            *state.status.write().unwrap() = message;
+        }
     }
+    if let (Some(clipboard), Some(snapshot)) = (clipboard.as_mut(), saved.take()) {
+        if clipboard.get_text().is_ok_and(|current| current == pasted) {
+            let _ = snapshot.restore(clipboard);
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn native_replace(remove: usize, text: &str, paste: bool) -> Result<(), String> {
+    let mut keyboard = Enigo::new(&Settings {
+        linux_delay: 0,
+        ..Settings::default()
+    })
+    .map_err(|e| format!("Input unavailable: {e:?}"))?;
+    erase_trigger(&mut keyboard, remove)?;
+    if paste {
+        #[cfg(target_os = "macos")]
+        let modifier = OutKey::Meta;
+        #[cfg(not(target_os = "macos"))]
+        let modifier = OutKey::Control;
+        keyboard
+            .key(modifier, Direction::Press)
+            .map_err(|e| format!("Paste failed: {e:?}"))?;
+        let paste = keyboard.key(OutKey::Unicode('v'), Direction::Click);
+        let release = keyboard.key(modifier, Direction::Release);
+        paste.map_err(|e| format!("Paste failed: {e:?}"))?;
+        release.map_err(|e| format!("Paste failed: {e:?}"))?;
+    } else {
+        keyboard
+            .text(text)
+            .map_err(|e| format!("Text insertion failed: {e:?}"))?;
+    }
+    Ok(())
 }
 
 fn modifier_bit(key: Key) -> u8 {
@@ -348,6 +425,7 @@ fn modifier_bit(key: Key) -> u8 {
     }
 }
 
+#[cfg(not(target_os = "windows"))]
 fn erase_trigger(keyboard: &mut Enigo, remove: usize) -> Result<(), String> {
     for _ in 0..remove {
         keyboard
@@ -366,9 +444,7 @@ enum ClipboardSnapshot {
 }
 
 impl ClipboardSnapshot {
-    fn capture() -> Result<Self, String> {
-        let mut clipboard =
-            arboard::Clipboard::new().map_err(|e| format!("Clipboard unavailable: {e}"))?;
+    fn capture(clipboard: &mut arboard::Clipboard) -> Result<Self, String> {
         let files = clipboard.get().file_list().ok();
         let image = clipboard.get_image().ok();
         let html = clipboard.get().html().ok();
@@ -574,17 +650,69 @@ mod tests {
     }
 
     #[test]
-    fn clicking_during_insertion_invalidates_undo_in_the_old_field() {
+    fn clicking_invalidates_a_pending_trigger_in_the_old_field() {
         let state = Arc::new(Expander::new(Vec::new()));
         state.injecting.store(true, Ordering::Relaxed);
         let mut input = InputState {
-            undo: Some(("!old".into(), "Expanded".into())),
+            pending: Some(("!old".into(), "Expanded".into())),
             ..InputState::default()
         };
         input.accept(
             event(EventType::ButtonPress(rdev::Button::Left), None),
             &state,
         );
-        assert!(input.undo.is_none());
+        assert!(input.pending.is_none());
+    }
+
+    #[test]
+    fn aliases_delete_only_the_typed_range_and_backspace_never_schedules_undo() {
+        let state = Arc::new(Expander::new(vec![Snippet {
+            trigger: "!long-trigger".into(),
+            aliases: vec!["уу".into()],
+            expansion: "First\nSecond".into(),
+            enabled: true,
+            created_at: 0,
+            updated_at: 0,
+        }]));
+        let (sender, receiver) = mpsc::channel();
+        *state.insertions.lock().unwrap() = Some(sender);
+        let mut input = InputState::default();
+        for c in ["у", "у"] {
+            input.accept(event(EventType::KeyPress(Key::KeyA), Some(c)), &state);
+        }
+        input.accept(event(EventType::KeyPress(Key::Space), Some(" ")), &state);
+        input.accept(event(EventType::KeyRelease(Key::Space), None), &state);
+        let request = receiver.try_recv().unwrap();
+        assert_eq!(request.remove, 3);
+        assert_eq!(request.text, "First\nSecond");
+        input.accept(event(EventType::KeyPress(Key::Backspace), None), &state);
+        input.accept(event(EventType::KeyRelease(Key::Backspace), None), &state);
+        assert!(receiver.try_recv().is_err());
+        assert_ne!(
+            state.input_revision.load(Ordering::SeqCst),
+            request.revision
+        );
+    }
+
+    #[test]
+    fn native_control_characters_are_pasted_without_focus_or_submit_keys() {
+        for text in ["a\nb", "a\rb", "a\tb"] {
+            assert!(needs_paste(text));
+        }
+        assert!(!needs_paste("А😀"));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn physical_typing_and_modifiers_are_visible_during_windows_insertion() {
+        let state = Arc::new(Expander::new(Vec::new()));
+        state.injecting.store(true, Ordering::Relaxed);
+        let mut input = InputState::default();
+        input.accept(event(EventType::KeyPress(Key::KeyA), Some("у")), &state);
+        assert_eq!(input.word, "у");
+        input.accept(event(EventType::KeyPress(Key::ControlLeft), None), &state);
+        assert_ne!(input.modifier, 0);
+        input.accept(event(EventType::KeyRelease(Key::ControlLeft), None), &state);
+        assert_eq!(input.modifier, 0);
     }
 }

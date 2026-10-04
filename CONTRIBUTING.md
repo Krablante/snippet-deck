@@ -28,6 +28,8 @@ cargo build --locked
 
 The binary is under `desktop/src-tauri/target/debug/` unless you set `CARGO_TARGET_DIR`. Google Drive sign-in in a local build also needs the `SNIPPETDECK_DESKTOP_OAUTH_CLIENT_SECRET` build environment variable; other features work without it. Do not put credentials in source or logs. GitHub Actions packages each OS on a matching runner; see [Operations](docs/OPERATIONS.md) for official releases.
 
+Windows CI also opens Microsoft Edge and checks the real keyboard hook and insertion path in a textarea and a contenteditable field. It covers Russian/English aliases, text around the cursor, repeated pastes, Unicode, Backspace and clipboard ownership. To run it locally on an interactive Windows desktop with Edge installed, use `cargo test --locked windows_browser_replacements -- --ignored --nocapture --test-threads=1`. This check briefly takes foreground focus and uses a temporary browser profile.
+
 ## Change carefully
 
 Keep trigger matching at the cursor, preserve text after it, and never submit a target field. Primary triggers and aliases must remain globally unique without regard to case. Desktop multiline expansion must paste rather than simulate Enter. Respect installed Android identifiers, Room migrations, the signing identity, backup readers, and the `snippetdeck-sync` format; old installations still need to read their data after an update.
