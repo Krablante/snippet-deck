@@ -292,7 +292,10 @@ pub(super) fn listen(callback: impl FnMut(Event) + 'static) -> Result<(), String
 mod tests {
     use super::*;
     use crate::{expansion::Expander, library::Snippet};
-    use ::windows::{core::w, Win32::Foundation::HWND};
+    use ::windows::{
+        core::{w, BOOL},
+        Win32::Foundation::HWND,
+    };
     use serde_json::{json, Value};
     use std::{
         net::{TcpListener, TcpStream},
@@ -408,8 +411,40 @@ mod tests {
             // Text editors preserve whitespace. An unstyled HTML div normalizes
             // adjacent spaces even during ordinary typing, before expansion runs.
             browser.call("Runtime.evaluate", json!({"expression": "document.title='SnippetDeck input check'; document.body.innerHTML='<textarea id=t style=width:500px;height:200px></textarea><div id=e contenteditable=true style=width:500px;height:200px;border:1px solid;white-space:pre-wrap></div>'; window.submits=0; document.addEventListener('keydown',e=>{if(e.key===\"Enter\"&&!e.shiftKey){window.submits++;e.preventDefault()}})"}));
-            browser.call("Page.bringToFront", json!({}));
+            browser.activate();
             browser
+        }
+
+        fn activate(&mut self) -> HWND {
+            unsafe extern "system" fn find(window: HWND, output: LPARAM) -> BOOL {
+                let mut title = [0; 256];
+                let len = GetWindowTextW(window, &mut title) as usize;
+                if String::from_utf16_lossy(&title[..len]).contains("SnippetDeck input check") {
+                    *(output.0 as *mut HWND) = window;
+                    return BOOL(0);
+                }
+                BOOL(1)
+            }
+            let deadline = Instant::now() + Duration::from_secs(10);
+            loop {
+                self.call("Page.bringToFront", json!({}));
+                let mut window = HWND::default();
+                unsafe {
+                    let _ = EnumWindows(Some(find), LPARAM(&mut window as *mut HWND as isize));
+                    if !window.is_invalid() {
+                        let _ = ShowWindow(window, SW_RESTORE);
+                        let _ = SetForegroundWindow(window);
+                        if GetForegroundWindow() == window {
+                            return window;
+                        }
+                    }
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "The test browser did not receive foreground focus"
+                );
+                thread::sleep(Duration::from_millis(50));
+            }
         }
 
         fn call(&mut self, method: &str, params: Value) -> Value {
@@ -447,7 +482,7 @@ mod tests {
 
         fn field(&mut self, id: &str, before: &str, after: &str) {
             self.evaluate(&format!("(()=>{{let e=document.getElementById({});let before={};let after={};if(e.tagName==='TEXTAREA'){{e.value=before+after;e.focus();e.setSelectionRange(before.length,before.length)}}else{{e.textContent=before+after;e.focus();let r=document.createRange();r.setStart(e.firstChild,before.length);r.collapse(true);let s=getSelection();s.removeAllRanges();s.addRange(r)}}}})()", json!(id), json!(before), json!(after)));
-            self.call("Page.bringToFront", json!({}));
+            self.activate();
             // Programmatic DOM selection changes are invisible to a global hook.
             // Real navigation resets the trigger buffer and returns to this caret.
             physical(&[VK_LEFT, VK_RIGHT]);
@@ -552,14 +587,7 @@ mod tests {
     #[ignore = "requires an interactive Windows desktop and Microsoft Edge; exercised in desktop CI"]
     fn windows_browser_replacements_preserve_surrounding_text() {
         let mut browser = Browser::open();
-        thread::sleep(Duration::from_millis(200));
-        let window = unsafe { GetForegroundWindow() };
-        let mut title = [0; 256];
-        let len = unsafe { GetWindowTextW(window, &mut title) } as usize;
-        assert!(
-            String::from_utf16_lossy(&title[..len]).contains("SnippetDeck input check"),
-            "Edge did not receive foreground focus"
-        );
+        let window = browser.activate();
         let multiline = "Первая строка\nSecond 😀 line";
         let state = Arc::new(Expander::new(vec![
             Snippet {

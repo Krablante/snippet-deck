@@ -54,16 +54,16 @@ jobs:
       - name: Linux build dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libx11-dev libxtst-dev libxdo-dev patchelf
+      - name: Run desktop tests
+        run: cargo test --locked
+      - name: Check Windows browser expansion
+        if: runner.os == 'Windows'
+        run: cargo test --locked windows_browser_replacements -- --ignored --nocapture --test-threads=1
       - name: Build installer
         env:
           SNIPPETDECK_OFFICIAL_BUILD: ${{ inputs.official_build && '1' || '0' }}
           SNIPPETDECK_DESKTOP_OAUTH_CLIENT_SECRET: ${{ secrets.SNIPPETDECK_DESKTOP_OAUTH_CLIENT_SECRET }}
-        run: |
-          cargo test --locked
-          npx --yes @tauri-apps/cli@2.11.5 build --bundles ${{ matrix.bundle }} --ci --no-sign -- --locked
-      - name: Check Windows browser expansion
-        if: runner.os == 'Windows'
-        run: cargo test --locked windows_browser_replacements -- --ignored --nocapture --test-threads=1
+        run: npx --yes @tauri-apps/cli@2.11.5 build --bundles ${{ matrix.bundle }} --ci --no-sign -- --locked
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
