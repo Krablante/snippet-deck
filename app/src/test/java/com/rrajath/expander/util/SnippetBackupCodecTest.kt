@@ -8,6 +8,24 @@ import org.junit.Test
 
 class SnippetBackupCodecTest {
 
+    @Test
+    fun `single import matches every primary and alias combination without case sensitivity`() {
+        val current = Snippet(trigger = "!Привет", expansion = "Old", aliases = listOf("rv", "!other"))
+        val library = listOf(current, Snippet(trigger = "!keep", expansion = "Keep"))
+        for (incoming in listOf(
+            Snippet(trigger = "!ПРИВЕТ", expansion = "New"),
+            Snippet(trigger = "!OTHER", expansion = "New"),
+            Snippet(trigger = "!new", expansion = "New", aliases = listOf("!ПРИВЕТ")),
+            Snippet(trigger = "!new", expansion = "New", aliases = listOf("RV")),
+        )) assertEquals(current, SnippetBackupCodec.singleMatch(library, incoming))
+        assertEquals(null, SnippetBackupCodec.singleMatch(library, Snippet(trigger = "!new", expansion = "New")))
+        assertThrows(BackupFormatException::class.java) {
+            SnippetBackupCodec.singleMatch(library, Snippet(trigger = "!Привет", expansion = "New", aliases = listOf("!KEEP")))
+        }
+        val single = SnippetBackupCodec.decodeText(SnippetBackupCodec.encodeText(listOf(current)))
+        assertEquals(listOf(current), single)
+    }
+
     private val snippets = listOf(
         Snippet(
             id = 12,

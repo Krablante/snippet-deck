@@ -20,6 +20,9 @@ class SnippetRepository(private val snippetDao: SnippetDao) {
 
     suspend fun replaceAll(snippets: List<Snippet>) = snippetDao.replaceAll(snippets)
 
+    suspend fun importSingle(snippet: Snippet, expected: Snippet?): Long =
+        snippetDao.importSingle(snippet, expected)
+
     suspend fun create(
         trigger: String,
         expansion: String,

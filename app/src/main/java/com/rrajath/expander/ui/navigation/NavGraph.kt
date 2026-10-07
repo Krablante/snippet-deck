@@ -37,6 +37,8 @@ import com.rrajath.expander.ui.screens.AddEditSnippetScreen
 import com.rrajath.expander.ui.screens.SnippetEditorDraft
 import com.rrajath.expander.ui.screens.SettingsScreen
 import com.rrajath.expander.ui.screens.SnippetListScreen
+import com.rrajath.expander.ui.screens.TextBackupImportDialog
+import com.rrajath.expander.data.Snippet
 import com.rrajath.expander.update.UpdateUiState
 import com.rrajath.expander.util.ImportExportManager
 import com.rrajath.expander.util.SnippetBackupCodec
@@ -62,8 +64,9 @@ sealed class Screen(val route: String) {
 }
 
 private data class PendingImport(
-    val snippets: List<com.rrajath.expander.data.Snippet>,
-    val source: String
+    val snippets: List<Snippet>,
+    val source: String,
+    val expected: Snippet? = null,
 )
 
 @Composable
@@ -152,6 +155,35 @@ internal fun NavGraph(
     val allSnippets by viewModel.allSnippets.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     var pendingImport by remember { mutableStateOf<PendingImport?>(null) }
+    var pasteSnippet by remember { mutableStateOf(false) }
+
+    suspend fun reviewImport(imported: List<Snippet>, source: String) {
+        val expected = if (imported.size == 1) viewModel.matchImportedSnippet(imported.single()) else null
+        pendingImport = PendingImport(imported, source, expected)
+    }
+
+    fun importText(text: String, singleOnly: Boolean = false) {
+        scope.launch {
+            try {
+                val imported = withContext(Dispatchers.Default) { SnippetBackupCodec.decodeText(text) }
+                require(!singleOnly || imported.size == 1) { "Paste one snippet. Use Backup & transfer for a whole library." }
+                reviewImport(imported, "text")
+                pasteSnippet = false
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Toast.makeText(context, "Import failed: ${error.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    if (pasteSnippet) {
+        TextBackupImportDialog(
+            onDismiss = { pasteSnippet = false },
+            onImport = { importText(it, singleOnly = true) },
+            singleSnippet = true,
+        )
+    }
 
     // Export launcher
     val exportLauncher = rememberLauncherForActivityResult(
@@ -177,7 +209,9 @@ internal fun NavGraph(
             scope.launch {
                 val result = ImportExportManager.importSnippets(context, it)
                 result.onSuccess { importedSnippets ->
-                    pendingImport = PendingImport(importedSnippets, "file")
+                    runCatching { reviewImport(importedSnippets, "file") }.onFailure { error ->
+                        Toast.makeText(context, "Import failed: ${error.message}", Toast.LENGTH_LONG).show()
+                    }
                 }.onFailure { error ->
                     Toast.makeText(context, "Import failed: ${error.message}", Toast.LENGTH_LONG).show()
                 }
@@ -186,12 +220,20 @@ internal fun NavGraph(
     }
 
     pendingImport?.let { importData ->
+        val single = importData.snippets.singleOrNull()
+        val expected = importData.expected
         AlertDialog(
             onDismissRequest = { pendingImport = null },
-            title = { Text("Replace local snippets?") },
+            title = { Text(if (single != null) if (expected != null) "Replace matching snippet?" else "Add snippet?" else "Replace local snippets?") },
             text = {
                 Text(
-                    "The ${importData.source} backup contains ${importData.snippets.size} snippets. " +
+                    if (single != null) {
+                        val shortcuts = (listOf(single.trigger) + single.aliases.take(5)).joinToString(" · ") +
+                            if (single.aliases.size > 5) " · …" else ""
+                        "${if (expected != null) "Replace ${expected.trigger} with" else "Add"} $shortcuts?\n\n" +
+                            single.expansion.take(240) + (if (single.expansion.length > 240) "…" else "") +
+                            "\n\n" + if (expected != null) "Only this snippet changes. Its enabled state is kept." else "Your existing snippets stay in place."
+                    } else "The ${importData.source} backup contains ${importData.snippets.size} snippets. " +
                         "It will replace all ${allSnippets.size} local snippets, including enabled and disabled states. " +
                         "This cannot be undone."
                 )
@@ -199,21 +241,23 @@ internal fun NavGraph(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.replaceAllSnippets(importData.snippets) {
+                        val complete = {
                             Toast.makeText(
                                 context,
-                                "Restored ${importData.snippets.size} snippets",
+                                if (single != null) if (expected != null) "Snippet replaced" else "Snippet added" else "Restored ${importData.snippets.size} snippets",
                                 Toast.LENGTH_SHORT
                             ).show()
                             if (syncViewModel.connected()) syncWithGoogle()
                         }
+                        if (single != null) viewModel.importSingle(single, expected, complete)
+                        else viewModel.replaceAllSnippets(importData.snippets, complete)
                         pendingImport = null
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
+                        containerColor = if (single != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                     )
                 ) {
-                    Text("Replace all")
+                    Text(if (single != null) if (expected != null) "Replace snippet" else "Add snippet" else "Replace all")
                 }
             },
             dismissButton = {
@@ -255,6 +299,20 @@ internal fun NavGraph(
                 syncState = syncState,
                 syncConnected = syncViewModel.connected(),
                 onSyncClick = { syncWithGoogle() },
+                onPasteClick = { pasteSnippet = true },
+                onSnippetCopy = { snippet ->
+                    scope.launch {
+                        runCatching { withContext(Dispatchers.Default) { SnippetBackupCodec.encodeText(listOf(snippet)) } }
+                            .onSuccess { text ->
+                                context.getSystemService(ClipboardManager::class.java).setPrimaryClip(
+                                    ClipData.newPlainText("SnippetDeck snippet", text)
+                                )
+                                Toast.makeText(context, "Snippet copied", Toast.LENGTH_SHORT).show()
+                            }.onFailure { error ->
+                                Toast.makeText(context, "Copy failed: ${error.message}", Toast.LENGTH_LONG).show()
+                            }
+                    }
+                },
             )
         }
 
@@ -384,21 +442,7 @@ internal fun NavGraph(
                     }
                 },
                 onImportText = { backupText ->
-                    scope.launch {
-                        runCatching {
-                            withContext(Dispatchers.Default) {
-                                SnippetBackupCodec.decodeText(backupText)
-                            }
-                        }.onSuccess { importedSnippets ->
-                            pendingImport = PendingImport(importedSnippets, "text")
-                        }.onFailure { error ->
-                            Toast.makeText(
-                                context,
-                                "Text import failed: ${error.message}",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
-                    }
+                    importText(backupText)
                 }
             )
         }

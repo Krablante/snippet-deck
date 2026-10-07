@@ -42,6 +42,26 @@ interface SnippetDao {
     }
 
     @Transaction
+    suspend fun importSingle(incoming: Snippet, expected: Snippet?): Long {
+        val current = getAllSnippetsOnce()
+        check(SnippetBackupCodec.singleMatch(current, incoming) == expected) {
+            "Matching snippet changed while reviewing. Paste or import it again."
+        }
+        val now = System.currentTimeMillis()
+        val snippet = incoming.copy(
+            id = expected?.id ?: 0,
+            isEnabled = expected?.isEnabled ?: incoming.isEnabled,
+            createdAt = expected?.createdAt ?: now,
+            updatedAt = now
+        )
+        SnippetBackupCodec.validateLibrary(current.filterNot { it.id == expected?.id } + snippet)
+        return if (expected == null) insert(snippet) else {
+            update(snippet)
+            snippet.id
+        }
+    }
+
+    @Transaction
     suspend fun saveChecked(snippet: Snippet, expected: Snippet? = null): Long {
         val current = getAllSnippetsOnce()
         if (expected != null) {

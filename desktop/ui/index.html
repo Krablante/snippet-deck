@@ -15,6 +15,7 @@
       <div class="top-actions">
         <button id="more" class="icon-button glass-button" type="button" aria-label="More options" aria-expanded="false">⋯</button>
         <div id="menu" class="menu" hidden>
+          <button id="paste-snippet" type="button">Paste snippet…</button>
           <button id="import" type="button">Import backup…</button>
           <button id="export" type="button">Export backup…</button>
           <button id="replace-cloud" type="button" hidden>Use this device's library in cloud…</button>
@@ -72,6 +73,7 @@
           <label class="enabled-row"><span>Enabled</span><span class="switch"><input id="snippet-enabled" type="checkbox" checked><span></span></span></label>
           <p id="form-error" class="error" role="alert" hidden></p>
           <button class="save-button" type="submit">Save snippet</button>
+          <button id="copy-snippet" class="copy-button" type="button" hidden>Copy snippet</button>
         </form>
       </section>
       <section id="welcome" class="welcome" aria-hidden="true">
@@ -87,6 +89,19 @@
       <form method="dialog" class="confirm-actions">
         <button type="submit" value="cancel">Cancel</button>
         <button id="confirm-action" type="submit" value="yes"></button>
+      </form>
+    </dialog>
+    <dialog id="paste" class="confirm paste-dialog" aria-labelledby="paste-title">
+      <h2 id="paste-title">Paste snippet</h2>
+      <p>Paste the text copied with “For SnippetDeck”. A matching trigger or alias updates only that snippet.</p>
+      <form id="paste-form">
+        <label class="field">Snippet text<textarea id="paste-text" rows="5" required spellcheck="false" placeholder="SNIPPETDECK_BACKUP_V2"></textarea></label>
+        <button id="paste-clipboard" class="text-button" type="button">Paste clipboard</button>
+        <p id="paste-error" class="error" role="alert" hidden></p>
+        <div class="confirm-actions">
+          <button id="paste-cancel" type="button">Cancel</button>
+          <button type="submit" class="primary-action">Review import</button>
+        </div>
       </form>
     </dialog>
   </div>

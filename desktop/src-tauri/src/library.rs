@@ -1,6 +1,6 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use chrono::Utc;
-use flate2::read::GzDecoder;
+use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
@@ -146,6 +146,53 @@ impl Library {
         write_atomic(path, data.as_bytes())
     }
 
+    pub fn single_match(&self, snippet: &Snippet) -> Result<Option<&Snippet>, String> {
+        let keys: HashSet<_> = std::iter::once(&snippet.trigger)
+            .chain(snippet.aliases.iter())
+            .map(|t| trigger_key(t))
+            .collect();
+        let matches: Vec<_> = self
+            .snippets
+            .iter()
+            .filter(|s| {
+                std::iter::once(&s.trigger)
+                    .chain(s.aliases.iter())
+                    .any(|t| keys.contains(&trigger_key(t)))
+            })
+            .collect();
+        if matches.len() > 1 {
+            return Err(format!("Triggers or aliases match several snippets: {}. Edit the incoming shortcuts before importing.",
+                matches.iter().take(5).map(|s| s.trigger.as_str()).collect::<Vec<_>>().join(", ")));
+        }
+        Ok(matches.first().copied())
+    }
+
+    pub fn import_single(
+        &mut self,
+        mut snippet: Snippet,
+        expected: Option<&Snippet>,
+    ) -> Result<(), String> {
+        if self.single_match(&snippet)? != expected {
+            return Err(
+                "Matching snippet changed while reviewing. Paste or import it again.".into(),
+            );
+        }
+        if let Some(current) = expected {
+            snippet.enabled = current.enabled;
+        }
+        self.put(expected.map(|s| s.trigger.as_str()), snippet)
+    }
+
+    pub fn encode_text(&self) -> Result<String, String> {
+        let mut gzip = GzEncoder::new(Vec::new(), Compression::default());
+        gzip.write_all(self.encode()?.as_bytes())
+            .map_err(|e| e.to_string())?;
+        Ok(format!(
+            "SNIPPETDECK_BACKUP_V2\n{}",
+            URL_SAFE_NO_PAD.encode(gzip.finish().map_err(|e| e.to_string())?)
+        ))
+    }
+
     pub fn put(&mut self, previous: Option<&str>, mut snippet: Snippet) -> Result<(), String> {
         snippet.trigger = normalize_primary(&snippet.trigger);
         snippet.aliases = snippet
@@ -274,6 +321,58 @@ fn normalize_primary(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn single_transfer_matches_shortcuts_and_preserves_unrelated_snippets() {
+        let mut library = Library::decode(r#"[{"trigger":"!Привет","expansion":"Old","aliases":["rv","!other"],"enabled":false,"createdAt":10},{"trigger":"!keep","expansion":"Keep"}]"#).unwrap();
+        let expected = library.snippets[0].clone();
+        let retained = library.snippets[1].clone();
+        for json in [
+            r#"[{"trigger":"!ПРИВЕТ","expansion":"New"}]"#,
+            r#"[{"trigger":"!OTHER","expansion":"New"}]"#,
+            r#"[{"trigger":"!new","expansion":"New","aliases":["!ПРИВЕТ"]}]"#,
+            r#"[{"trigger":"!new","expansion":"New","aliases":["RV"]}]"#,
+        ] {
+            let incoming = Library::decode(json).unwrap().snippets.remove(0);
+            assert!(library.single_match(&incoming).unwrap() == Some(&expected));
+        }
+        let incoming =
+            Library::decode(r#"[{"trigger":"!new","expansion":"New\n😀","aliases":["RV"]}]"#)
+                .unwrap()
+                .snippets
+                .remove(0);
+        library
+            .import_single(incoming.clone(), Some(&expected))
+            .unwrap();
+        assert_eq!(library.snippets.len(), 2);
+        assert_eq!(library.snippets[0].created_at, 10);
+        assert!(!library.snippets[0].enabled);
+        assert!(library.snippets[1] == retained);
+        let before = library.snippets.clone();
+        assert!(library
+            .import_single(incoming.clone(), Some(&expected))
+            .is_err());
+        assert!(library.import_single(incoming.clone(), None).is_err());
+        let mut ambiguous = incoming;
+        ambiguous.aliases.push("!KEEP".into());
+        assert!(library.single_match(&ambiguous).is_err());
+        assert!(library.snippets == before);
+        let added = Library::decode(r#"[{"trigger":"!added","expansion":"Added"}]"#)
+            .unwrap()
+            .snippets
+            .remove(0);
+        library.import_single(added, None).unwrap();
+        assert_eq!(library.snippets.len(), 3);
+        let single = Library {
+            snippets: vec![library.snippets[0].clone()],
+        };
+        assert!(
+            Library::decode(&single.encode_text().unwrap())
+                .unwrap()
+                .snippets
+                == single.snippets
+        );
+    }
 
     #[test]
     fn unicode_triggers_share_matching_validation_edit_and_delete() {

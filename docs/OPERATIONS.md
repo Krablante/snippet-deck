@@ -36,7 +36,7 @@ Google OAuth branding uses the [public site](https://krablante.github.io/snippet
 
 ## Recovery and upstream
 
-Exports are full local-library backups. Before reinstalling or resolving a sync conflict, save a copy from each affected device. An import replaces the entire local library after confirmation; disconnecting Drive does not remove its remote files. The [guide](GUIDE.md#back-up-or-move-a-library) gives the user's recovery path. Do not point two running desktop installations at one working library file.
+Backup exports contain the full local library; **Copy snippet** contains one entry. Before reinstalling or resolving a sync conflict, save a backup from each affected device. Importing multiple entries or an empty backup replaces the entire local library after confirmation; one entry adds or updates a matching snippet. Disconnecting Drive does not remove its remote files. The [guide](GUIDE.md#back-up-or-move-a-library) gives the user's recovery path. Do not point two running desktop installations at one working library file.
 
 Review upstream [Expander](https://github.com/rrajath/expander) changes separately. Preserve cursor behavior, data migrations, signing identity, backup formats, and attribution when incorporating upstream code.
 

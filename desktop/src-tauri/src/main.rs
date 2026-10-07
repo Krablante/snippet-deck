@@ -29,7 +29,9 @@ use tauri_plugin_autostart::ManagerExt;
 struct AppState {
     library: Mutex<Library>,
     library_error: Mutex<Option<String>>,
-    import: Mutex<Option<Library>>,
+    import: Mutex<Option<PendingImport>>,
+    // X11 needs a live clipboard owner after Copy snippet returns.
+    clipboard: Mutex<Option<arboard::Clipboard>>,
     path: PathBuf,
     active_path: PathBuf,
     sync_path: PathBuf,
@@ -41,6 +43,89 @@ struct AppState {
     update_lock: Mutex<()>,
     install_lock: Mutex<()>,
     expander: Arc<Expander>,
+}
+
+struct PendingImport {
+    library: Library,
+    single: bool,
+    expected: Option<Snippet>,
+}
+
+#[derive(Serialize)]
+struct ImportPreview {
+    count: usize,
+    snippet: Option<Snippet>,
+    expected: Option<Snippet>,
+}
+
+fn prepare_import(state: &AppState, library: Library) -> Result<ImportPreview, String> {
+    let current = state.library.lock().unwrap();
+    let single = library.snippets.len() == 1 && state.library_error.lock().unwrap().is_none();
+    let expected = if single {
+        current.single_match(&library.snippets[0])?.cloned()
+    } else {
+        None
+    };
+    let preview = ImportPreview {
+        count: library.snippets.len(),
+        snippet: if single {
+            Some(library.snippets[0].clone())
+        } else {
+            None
+        },
+        expected: expected.clone(),
+    };
+    *state.import.lock().unwrap() = Some(PendingImport {
+        library,
+        single,
+        expected,
+    });
+    Ok(preview)
+}
+
+#[tauri::command]
+fn preview_snippet(
+    state: tauri::State<'_, AppState>,
+    text: String,
+) -> Result<ImportPreview, String> {
+    *state.import.lock().unwrap() = None;
+    if state.library_error.lock().unwrap().is_some() {
+        return Err("Import a backup file to recover the saved library first.".into());
+    }
+    let library = Library::decode(&text)?;
+    if library.snippets.len() != 1 {
+        return Err("Paste one snippet. Use Import backup for a whole library.".into());
+    }
+    prepare_import(&state, library)
+}
+
+#[tauri::command]
+fn read_clipboard() -> Result<String, String> {
+    arboard::Clipboard::new()
+        .and_then(|mut c| c.get_text())
+        .map_err(|e| format!("Cannot read clipboard: {e}"))
+}
+
+#[tauri::command]
+fn copy_snippet(state: tauri::State<'_, AppState>, expected: Snippet) -> Result<(), String> {
+    let current = state.library.lock().unwrap();
+    if !current.snippets.contains(&expected) {
+        return Err("Snippet changed. Reopen it before copying.".into());
+    }
+    let text = Library {
+        snippets: vec![expected],
+    }
+    .encode_text()?;
+    let mut clipboard = state.clipboard.lock().unwrap();
+    if clipboard.is_none() {
+        *clipboard =
+            Some(arboard::Clipboard::new().map_err(|e| format!("Cannot open clipboard: {e}"))?);
+    }
+    clipboard
+        .as_mut()
+        .unwrap()
+        .set_text(text)
+        .map_err(|e| format!("Cannot copy snippet: {e}"))
 }
 
 #[derive(Serialize)]
@@ -220,7 +305,8 @@ impl AppState {
 fn choose_import(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
-) -> Result<Option<usize>, String> {
+) -> Result<Option<ImportPreview>, String> {
+    *state.import.lock().unwrap() = None;
     state.expander.dialog_open.store(true, Ordering::Relaxed);
     let chosen = choose_backup(&app);
     state.expander.dialog_open.store(false, Ordering::Relaxed);
@@ -233,19 +319,26 @@ fn choose_import(
     }
     let text = fs::read_to_string(path).map_err(|e| e.to_string())?;
     let library = Library::decode(&text)?;
-    let count = library.snippets.len();
-    *state.import.lock().unwrap() = Some(library);
-    Ok(Some(count))
+    prepare_import(&state, library).map(Some)
 }
 
 #[tauri::command]
 fn finish_import(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let library = state
+    let pending = state
         .import
         .lock()
         .unwrap()
         .take()
         .ok_or("Choose a backup first")?;
+    if pending.single {
+        return save_change(&state, |library| {
+            library.import_single(
+                pending.library.snippets[0].clone(),
+                pending.expected.as_ref(),
+            )
+        });
+    }
+    let library = pending.library;
     // A confirmed import is also the recovery path for an unreadable working file.
     let mut current = state.library.lock().unwrap();
     library.save(&state.path)?;
@@ -620,6 +713,9 @@ fn main() {
             set_start_at_login,
             choose_import,
             finish_import,
+            preview_snippet,
+            read_clipboard,
+            copy_snippet,
             export_file,
             sync_now,
             disconnect_sync,
@@ -646,6 +742,7 @@ fn main() {
                 library: Mutex::new(library),
                 library_error: Mutex::new(library_error),
                 import: Mutex::new(None),
+                clipboard: Mutex::new(None),
                 path,
                 active_path,
                 sync_active: AtomicBool::new(sync_path.exists() && !sync_disabled_path.exists()),

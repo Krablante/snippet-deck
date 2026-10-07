@@ -7,10 +7,12 @@ import com.rrajath.expander.data.AppDatabase
 import com.rrajath.expander.data.Snippet
 import com.rrajath.expander.data.SnippetRepository
 import com.rrajath.expander.domain.TriggerUtils
+import com.rrajath.expander.util.SnippetBackupCodec
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class SnippetViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -115,6 +117,19 @@ class SnippetViewModel(application: Application) : AndroidViewModel(application)
     fun replaceAllSnippets(snippets: List<Snippet>, onComplete: () -> Unit = {}) {
         change {
             repository.replaceAll(snippets)
+            _searchQuery.value = ""
+            onComplete()
+        }
+    }
+
+    suspend fun matchImportedSnippet(snippet: Snippet): Snippet? =
+        withContext(Dispatchers.Default) {
+            SnippetBackupCodec.singleMatch(repository.getAllSnippetsOnce(), snippet)
+        }
+
+    fun importSingle(snippet: Snippet, expected: Snippet?, onComplete: () -> Unit) {
+        change {
+            repository.importSingle(snippet, expected)
             _searchQuery.value = ""
             onComplete()
         }

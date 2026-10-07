@@ -31,8 +31,8 @@ android {
         applicationId = "com.rrajath.expander"
         minSdk = 33
         targetSdk = 36
-        versionCode = 10807
-        versionName = "1.8.7"
+        versionCode = 10900
+        versionName = "1.9.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

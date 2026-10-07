@@ -12,7 +12,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -47,6 +46,8 @@ internal fun SnippetListScreen(
     syncState: SyncUiState,
     syncConnected: Boolean,
     onSyncClick: () -> Unit,
+    onPasteClick: () -> Unit = {},
+    onSnippetCopy: (Snippet) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -120,6 +121,7 @@ internal fun SnippetListScreen(
                         onDelete = { onSnippetDelete(snippet) },
                         onToggle = { onSnippetToggle(snippet) },
                         syncConnected = syncConnected,
+                        onCopy = { onSnippetCopy(snippet) },
                     )
                 }
             }
@@ -167,8 +169,15 @@ internal fun SnippetListScreen(
                         )
                     }
                 }
-                IconButton(onClick = onSettingsClick) {
-                    Icon(Icons.Default.Settings, contentDescription = "Settings", tint = colors.onBackground)
+                var libraryMenu by remember { mutableStateOf(false) }
+                Box {
+                    IconButton(onClick = { libraryMenu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "More options", tint = colors.onBackground)
+                    }
+                    DropdownMenu(expanded = libraryMenu, onDismissRequest = { libraryMenu = false }) {
+                        DropdownMenuItem(text = { Text("Paste snippet") }, onClick = { libraryMenu = false; onPasteClick() })
+                        DropdownMenuItem(text = { Text("Settings") }, onClick = { libraryMenu = false; onSettingsClick() })
+                    }
                 }
             }
         }
@@ -213,6 +222,7 @@ internal fun SnippetItem(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
     syncConnected: Boolean = false,
+    onCopy: () -> Unit = {},
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -270,6 +280,7 @@ internal fun SnippetItem(
                 Icon(Icons.Default.MoreVert, contentDescription = "Options for ${snippet.trigger}", tint = colors.onSurfaceVariant)
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(text = { Text("Copy snippet") }, onClick = { menuOpen = false; onCopy() })
                 DropdownMenuItem(text = { Text(if (snippet.isEnabled) "Turn off" else "Turn on") }, onClick = { menuOpen = false; onToggle() })
                 DropdownMenuItem(text = { Text("Delete", color = colors.error) }, onClick = { menuOpen = false; confirmDelete = true })
             }

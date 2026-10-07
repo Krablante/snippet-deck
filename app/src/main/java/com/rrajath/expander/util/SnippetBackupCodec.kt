@@ -26,6 +26,20 @@ object SnippetBackupCodec {
 
     private val prettyGson: Gson = GsonBuilder().setPrettyPrinting().create()
 
+    fun singleMatch(library: List<Snippet>, incoming: Snippet): Snippet? {
+        val keys = TriggerUtils.allTriggers(incoming.trigger, incoming.aliases)
+            .map(TriggerUtils::matchKey).toSet()
+        val matches = library.filter { snippet ->
+            TriggerUtils.allTriggers(snippet.trigger, snippet.aliases)
+                .any { TriggerUtils.matchKey(it) in keys }
+        }
+        if (matches.size > 1) throw BackupFormatException(
+            "Triggers or aliases match several snippets: ${matches.take(5).joinToString { it.trigger }}${if (matches.size > 5) "…" else ""}. " +
+                "Edit the incoming shortcuts before importing."
+        )
+        return matches.singleOrNull()
+    }
+
     fun validateLibrary(snippets: List<Snippet>) {
         val seen = mutableSetOf<String>()
         for (snippet in snippets) {

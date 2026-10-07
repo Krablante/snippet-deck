@@ -36,6 +36,7 @@ function ask(title, message, action, danger = true) {
   $('confirm-message').textContent = message;
   $('confirm-action').textContent = action;
   $('confirm-action').classList.toggle('danger-action', danger);
+  $('confirm-action').classList.toggle('primary-action', !danger);
   const dialog = $('confirm');
   dialog.returnValue = 'cancel';
   return new Promise(resolve => {
@@ -125,6 +126,7 @@ function edit(snippet = null) {
   originalSnippet = snippet;
   $('editor-title').textContent = snippet ? 'Edit snippet' : 'New snippet';
   $('delete').hidden = !snippet;
+  $('copy-snippet').hidden = !snippet;
   $('trigger').value = snippet?.trigger ?? '';
   $('aliases').value = snippet?.aliases.join(', ') ?? '';
   $('expansion').value = snippet?.expansion ?? '';
@@ -166,7 +168,7 @@ async function refresh() {
     const snapshot = await invoke('snapshot');
     snippets = snapshot.snippets;
     libraryError = snapshot.libraryError;
-    for (const id of ['new', 'active', 'export']) $(id).disabled = Boolean(libraryError);
+    for (const id of ['new', 'active', 'export', 'paste-snippet']) $(id).disabled = Boolean(libraryError);
     $('sync').disabled = Boolean(libraryError) || syncBusy;
     $('active').checked = snapshot.active;
     $('startup').checked = snapshot.startAtLogin;
@@ -229,7 +231,7 @@ document.addEventListener('click', event => {
   if (!$('more').contains(event.target) && !$('menu').contains(event.target)) menu(false);
 });
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && !$('confirm').open) {
+  if (event.key === 'Escape' && !$('confirm').open && !$('paste').open) {
     if (!$('menu').hidden) menu(false);
     else if (!$('editor').hidden && window.innerWidth <= 700) leaveEditor();
   }
@@ -349,15 +351,60 @@ $('delete').addEventListener('click', async () => {
 $('import').addEventListener('click', async () => {
   menu(false);
   try {
-    const count = await invoke('choose_import');
-    if (count === null) return;
-    if (!await ask('Replace your library?', `Import ${count} ${count === 1 ? 'snippet' : 'snippets'} and remove everything currently on this device?\n\nExport a backup first if you want to keep it.`, 'Replace')) return;
-    await invoke('finish_import');
-    closeEditor();
-    await refresh();
-    notify(`${count} ${count === 1 ? 'snippet' : 'snippets'} imported`);
-    if (syncConnected) syncDrive();
+    const preview = await invoke('choose_import');
+    if (preview === null) return;
+    await confirmImport(preview);
   } catch (error) { notify(errorMessage(error)); }
+});
+
+async function confirmImport(preview) {
+  const { count, snippet, expected } = preview;
+  const shortcuts = snippet ? [snippet.trigger, ...snippet.aliases.slice(0, 5)].join(' · ') + (snippet.aliases.length > 5 ? ' · …' : '') : '';
+  const message = snippet
+    ? `${expected ? `Replace ${expected.trigger} with` : 'Add'} ${shortcuts}?\n\n${snippet.expansion.slice(0, 240)}${snippet.expansion.length > 240 ? '…' : ''}\n\n${expected ? 'Only this snippet changes. Its enabled state is kept.' : 'Your existing snippets stay in place.'}`
+    : `Import ${count} snippets and remove everything currently on this device?\n\nExport a backup first if you want to keep it.`;
+  if (!await ask(snippet ? expected ? 'Replace matching snippet?' : 'Add snippet?' : 'Replace your library?', message, snippet ? expected ? 'Replace snippet' : 'Add snippet' : 'Replace all', !snippet)) return;
+  await invoke('finish_import');
+  await refresh();
+  if (snippet) {
+    if (editorValues() === editorOriginal || $('editor').hidden) edit(snippets.find(s => s.trigger === snippet.trigger));
+    notify(expected ? 'Snippet replaced' : 'Snippet added');
+  } else {
+    closeEditor();
+    notify(`${count} snippets imported`);
+  }
+  if (syncConnected) syncDrive();
+}
+
+$('paste-snippet').addEventListener('click', () => {
+  menu(false);
+  $('paste-text').value = '';
+  $('paste-error').hidden = true;
+  $('paste').showModal();
+  $('paste-text').focus();
+});
+$('paste-cancel').addEventListener('click', () => $('paste').close());
+$('paste-clipboard').addEventListener('click', async () => {
+  try { $('paste-text').value = await invoke('read_clipboard'); }
+  catch (error) { $('paste-error').textContent = errorMessage(error); $('paste-error').hidden = false; }
+});
+$('paste-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = event.submitter;
+  button.disabled = true;
+  try {
+    const preview = await invoke('preview_snippet', { text: $('paste-text').value });
+    $('paste').close();
+    await confirmImport(preview);
+  } catch (error) {
+    if ($('paste').open) { $('paste-error').textContent = errorMessage(error); $('paste-error').hidden = false; }
+    else notify(errorMessage(error));
+  } finally { button.disabled = false; }
+});
+$('copy-snippet').addEventListener('click', async () => {
+  if (editorValues() !== editorOriginal) { notify('Save your changes before copying the snippet'); return; }
+  try { await invoke('copy_snippet', { expected: originalSnippet }); notify('Snippet copied · paste it into SnippetDeck on another device'); }
+  catch (error) { notify(errorMessage(error)); }
 });
 $('export').addEventListener('click', async () => {
   menu(false);

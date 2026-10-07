@@ -52,9 +52,17 @@ Placeholders use the device's local time at insertion. Repeated placeholders in 
 
 Android uses its system locale and `SimpleDateFormat` patterns. Desktop uses English names, ISO week numbers, and these pattern tokens: `yyyy`, `yy`, `M`/`MM`/`MMM`/`MMMM`, `d`/`dd`, `EEE`/`EEEE`, `H`/`HH`, `h`/`hh`, `m`/`mm`, `s`/`ss`, and `a`. Quote literal letters with single quotes. Unknown placeholders and invalid or unsupported patterns stay as written; use the listed tokens for backups shared between platforms.
 
+## Copy or update one snippet
+
+Copy a snippet with a website's **For SnippetDeck** button or from another installation. In either app, open **More options → Paste snippet**, paste the text, and choose **Review import**. A matching primary trigger or alias, ignoring case, offers **Replace snippet**; otherwise choose **Add snippet**. Other entries stay in place. Replacement takes the incoming text and shortcuts and keeps the existing entry's enabled state.
+
+If the incoming shortcuts match several different entries, the import stops and names them. Adjust the incoming shortcuts before trying again. If the matching entry changes while the confirmation is open, repeat the import to review its current version.
+
+To send one entry back, use **Copy snippet** in its Android row menu or below **Save snippet** in the desktop editor. Save desktop edits before copying. The clipboard package includes its text, trigger, aliases, and enabled state and works on both platforms without exporting the whole library. File import and **Paste backup text** on Android also recognize a package containing one snippet.
+
 ## Back up or move a library
 
-Android: **Settings → Backup & transfer** exports a JSON file or compact text, and imports either after showing the snippet count. Desktop: **More options → Export backup… / Import backup…** uses the same format. An import **replaces the whole local library**, including deletions, only after confirmation. Export the current library before importing another one if you might need both.
+Android: **Settings → Backup & transfer** exports a JSON file or compact text, and imports either after showing a preview. Desktop: **More options → Export backup… / Import backup…** uses the same format. A backup containing one snippet uses the add/update flow above. A backup with multiple snippets, or an empty backup, **replaces the whole local library**, including deletions, only after **Replace all** confirmation. Export the current library before a full replacement if you might need both.
 
 The working library stays in each device's app data. Keep backup files somewhere you control; they can contain sensitive text. Old raw-array JSON, v1.0 JSON, and text V1 backups remain readable.
 

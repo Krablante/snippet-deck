@@ -72,9 +72,9 @@ Each snippet has one primary trigger and zero or more aliases:
 - Aliases are trimmed but otherwise preserved exactly.
 - Primary triggers and aliases are globally unique, case-insensitively.
 
-A complete restore validates the input and then replaces the library in one Room transaction. Fresh local IDs are assigned during import. Sync keeps the IDs of retained snippets and writes only additions, changes and deletions; an unrelated remote change therefore leaves an open editor's row intact. Android's system backup includes the Room database with journal files and appearance preferences; sync metadata stays in `noBackupFilesDir`, so a restored installation gets its own sync identity.
+A complete restore validates the input and then replaces the library in one Room transaction. Fresh local IDs are assigned during a complete restore. Single-snippet imports retain the matched row's ID, creation time and enabled state, and update only that row. Sync keeps the IDs of retained snippets and writes only additions, changes and deletions; an unrelated remote change therefore leaves an open editor's row intact. Android's system backup includes the Room database with journal files and appearance preferences; sync metadata stays in `noBackupFilesDir`, so a restored installation gets its own sync identity.
 
-Desktop keeps a separate local JSON file under the OS application-data directory. Library and sync saves share a temporary-file replacement that flushes data before rename and creates private files on Unix. The library uses the Android backup envelope with `format=snippetdeck-backup` and `schemaVersion=2`, so export and import are reversible across platforms. Sync has its own versioned format and local metadata file; backup imports still replace the full library after confirmation. Avoid pointing two live desktop installations at the same working file.
+Desktop keeps a separate local JSON file under the OS application-data directory. Library and sync saves share a temporary-file replacement that flushes data before rename and creates private files on Unix. The library uses the Android backup envelope with `format=snippetdeck-backup` and `schemaVersion=2`, so export and import are reversible across platforms. Sync has its own versioned format and local metadata file. Avoid pointing two live desktop installations at the same working file.
 
 Libraries allow up to 10,000 snippets and 2 MB of backup JSON. Saves serialize the full desktop library, while the typing index is rebuilt only after an edit. Google Drive sync lists at most 50 device files when the app opens, saves, or the user requests sync. Local metadata remembers each peer file's Drive `version`; unchanged files are already represented in the local merged replica and are not downloaded again. A missing revision always forces a read, and choosing another library reads it explicitly. Changed files still exchange full bounded replicas; higher limits would need fresh network and merge measurements.
 
@@ -82,7 +82,7 @@ Sync reads one remote file at a time and retains only versions that are distinct
 
 ## Interfaces
 
-The Compose interface provides snippet editing, search, enabled state, accessibility onboarding, theme selection, backup and transfer, Google Drive connection, and manual update checks. Import always previews the source and snippet count and warns that the current library will be replaced.
+The Compose interface provides snippet editing, search, enabled state, accessibility onboarding, theme selection, backup and transfer, Google Drive connection, and manual update checks. Import previews a single addition/replacement or warns before replacing a complete library.
 
 Chalk, Ink, and Parchment use deterministic Material 3 schemes. Android stores `WHITE`, `BLACK`, and `SEPIA`, while the desktop editor stores `white`, `black`, and `sepia`; legacy Android `LIGHT`/`DARK`/`SYSTEM` values migrate to the nearest option. Dynamic wallpaper colors are disabled to keep contrast predictable. The continuous snippet list runs beneath a compact toolbar and bottom search. Haze 2 captures the list once for three glass blocks and renders depth blur, edge refraction, and specular lighting behind sharp controls. A background color in each material obscures the original unblurred pixels. Capture is skipped in favor of solid controls for reduced transparency or system high contrast, independently of battery saver. The bottom controls follow the resized window when the keyboard opens. Forms remain opaque and placeholders open on demand.
 
@@ -106,7 +106,9 @@ Desktop uses a small static web interface with the same three palettes. On a nar
 
 `ImportExportManager` reads and writes content URIs with strict size limits. Clipboard interaction stays in the UI layer.
 
-The desktop import accepts Android's JSON envelope, raw-array and legacy backups, and compressed text V1/V2. It validates the complete library and previews the count before a full replacement. The desktop export writes the same versioned JSON envelope, without local row IDs. Backups are for explicit recovery, not the cloud sync transport.
+Both importers route a one-record package to an add/update flow. They match the incoming primary trigger and aliases against every existing shortcut using the expansion match key. Several matching rows are an error; confirmation captures the one matching record, and saving checks it again inside the Room transaction or desktop library lock. An unmatched package adds one entry. Copying one snippet uses the existing text V2 format. No new transport or schema is needed.
+
+The desktop import accepts Android's JSON envelope, raw-array and legacy backups, and compressed text V1/V2. Multi-record and empty backups still preview a full replacement. An unreadable desktop library always requires explicit full recovery from a file, even with one record. Desktop file export writes the same versioned JSON envelope, without local row IDs. Backups are for explicit recovery, not the cloud sync transport.
 
 ## Optional Google Drive sync
 

@@ -18,6 +18,37 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class SnippetDatabaseTest {
     @Test
+    fun singleImportPreservesOtherRowsAndRejectsStaleOrAmbiguousMatches() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
+        try {
+            val dao = database.snippetDao()
+            val old = Snippet(trigger = "!old", expansion = "Old", aliases = listOf("алиас"), isEnabled = false, createdAt = 10)
+            val expected = old.copy(id = dao.saveChecked(old))
+            val keep = Snippet(trigger = "!keep", expansion = "Keep")
+            val retained = keep.copy(id = dao.saveChecked(keep))
+            val incoming = Snippet(trigger = "!new", expansion = "New\n😀", aliases = listOf("АЛИАС"))
+            assertEquals(expected.id, dao.importSingle(incoming, expected))
+            val updated = dao.getSnippetById(expected.id)!!
+            assertEquals("!new", updated.trigger)
+            assertEquals(incoming.expansion, updated.expansion)
+            assertEquals(false, updated.isEnabled)
+            assertEquals(10L, updated.createdAt)
+            assertEquals(retained, dao.getSnippetById(retained.id))
+            val before = dao.getAllSnippetsOnce()
+            assertTrue(runCatching { dao.importSingle(incoming, expected) }.isFailure)
+            assertTrue(runCatching { dao.importSingle(incoming, null) }.isFailure)
+            assertTrue(runCatching { dao.importSingle(incoming.copy(aliases = listOf("!keep")), updated) }.isFailure)
+            assertEquals(before, dao.getAllSnippetsOnce())
+            val added = dao.importSingle(Snippet(trigger = "!added", expansion = "Added"), null)
+            assertEquals("Added", dao.getSnippetById(added)?.expansion)
+            assertEquals(3, dao.getAllSnippetsOnce().size)
+        } finally {
+            database.close()
+        }
+    }
+
+    @Test
     fun debugVariantUsesIsolatedApplicationId() {
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
         assertEquals("com.rrajath.expander.debug", appContext.packageName)

@@ -233,9 +233,9 @@ internal fun SettingsScreen(
 
             SettingsSection("Backup & transfer")
             SettingsItem("Export backup file", "JSON", onExportClick)
-            SettingsItem("Import backup file", "Replaces the library after confirmation", onImportClick)
+            SettingsItem("Import backup file", "One snippet adds or updates; a full backup replaces the library", onImportClick)
             SettingsItem("Copy backup text", "For notes or messages", onCopyTextClick)
-            SettingsItem("Paste backup text", "Replaces the library after confirmation", { showTextImportDialog = true })
+            SettingsItem("Paste backup text", "One snippet adds or updates; a full backup replaces the library", { showTextImportDialog = true })
 
             SettingsSection("About")
             Text("SnippetDeck · $versionName", modifier = Modifier.padding(start = 20.dp, top = 12.dp), style = MaterialTheme.typography.bodyMedium)
@@ -297,27 +297,28 @@ private fun UpdateSettingsAction(
 }
 
 @Composable
-private fun TextBackupImportDialog(
+internal fun TextBackupImportDialog(
     onDismiss: () -> Unit,
-    onImport: (String) -> Unit
+    onImport: (String) -> Unit,
+    singleSnippet: Boolean = false,
 ) {
     val context = LocalContext.current
     var backupText by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Paste backup text") },
+        title = { Text(if (singleSnippet) "Paste snippet" else "Paste backup text") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = "Paste the complete text beginning with SNIPPETDECK_BACKUP_V2. Older V1 backups are also accepted. You will review the snippet count before replacement.",
+                    text = if (singleSnippet) "Paste the text copied with “For SnippetDeck”. A matching trigger or alias updates only that snippet." else "Paste SnippetDeck text or JSON. One snippet adds or updates a matching entry. A full backup replaces the library after confirmation.",
                     style = MaterialTheme.typography.bodySmall
                 )
                 OutlinedTextField(
                     value = backupText,
                     onValueChange = { backupText = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Backup text") },
+                    label = { Text(if (singleSnippet) "Snippet text" else "Backup text") },
                     minLines = 6,
                     maxLines = 10
                 )
