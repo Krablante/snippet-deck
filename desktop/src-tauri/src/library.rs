@@ -3,6 +3,7 @@ use chrono::Utc;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use serde::{Deserialize, Serialize};
 use std::{
+    cmp::Reverse,
     collections::HashSet,
     fs,
     io::{Read, Write},
@@ -50,6 +51,13 @@ pub struct Library {
 }
 
 impl Library {
+    pub fn recently_updated(&self) -> Vec<Snippet> {
+        let mut snippets = self.snippets.clone();
+        // Match Android's updatedAt DESC, trigger COLLATE NOCASE ASC ordering.
+        snippets.sort_by_cached_key(|s| (Reverse(s.updated_at), s.trigger.to_ascii_lowercase()));
+        snippets
+    }
+
     pub fn load(path: &Path) -> Result<Self, String> {
         if !path.exists() {
             return Ok(Self::default());
@@ -321,6 +329,44 @@ fn normalize_primary(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recent_order_survives_storage_order_edits_and_imports() {
+        let mut library = Library::decode(
+            r#"[{"trigger":"!old","expansion":"Old","updatedAt":10},
+                {"trigger":"!Beta","expansion":"Tied","updatedAt":20},
+                {"trigger":"!alpha","expansion":"Tied","updatedAt":20},
+                {"trigger":"!new","expansion":"New","enabled":false,"updatedAt":30}]"#,
+        )
+        .unwrap();
+        let before = library.snippets.clone();
+        let triggers = |library: &Library| {
+            library
+                .recently_updated()
+                .into_iter()
+                .map(|s| s.trigger)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(triggers(&library), ["!new", "!alpha", "!Beta", "!old"]);
+        assert!(library.snippets == before);
+        library.snippets.reverse();
+        assert_eq!(triggers(&library), ["!new", "!alpha", "!Beta", "!old"]);
+        let mut edited = before[0].clone();
+        edited.expansion = "Edited".into();
+        library.put(Some("!old"), edited).unwrap();
+        assert_eq!(triggers(&library)[0], "!old");
+        let added = Library::decode(r#"[{"trigger":"!added","expansion":"Added"}]"#)
+            .unwrap()
+            .snippets
+            .remove(0);
+        library.import_single(added, None).unwrap();
+        assert!(library.recently_updated()[..2]
+            .iter()
+            .any(|s| s.trigger == "!added"));
+        let restored = Library::decode(&library.encode().unwrap()).unwrap();
+        assert_eq!(triggers(&restored), triggers(&library));
+        assert!(Library::default().recently_updated().is_empty());
+    }
 
     #[test]
     fn single_transfer_matches_shortcuts_and_preserves_unrelated_snippets() {

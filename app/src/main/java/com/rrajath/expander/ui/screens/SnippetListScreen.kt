@@ -98,8 +98,8 @@ internal fun SnippetListScreen(
             }
             item {
                 Text(
-                    text = if (searchQuery.isEmpty()) "${snippets.size} ${if (snippets.size == 1) "snippet" else "snippets"}" else "${snippets.size} found",
-                    modifier = Modifier.padding(start = 20.dp, top = 10.dp, bottom = 9.dp),
+                    text = (if (searchQuery.isEmpty()) "${snippets.size} ${if (snippets.size == 1) "snippet" else "snippets"}" else "${snippets.size} found") + " · Recently updated",
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 9.dp),
                     style = MaterialTheme.typography.labelMedium,
                     color = colors.onSurfaceVariant,
                 )

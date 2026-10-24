@@ -71,7 +71,7 @@ function render() {
   const query = $('search').value.toLocaleLowerCase().trim();
   const filtered = snippets.filter(s => [s.trigger, s.expansion, ...s.aliases]
     .some(value => value.toLocaleLowerCase().includes(query)));
-  $('count').textContent = `${filtered.length} ${filtered.length === 1 ? 'snippet' : 'snippets'}`;
+  $('count').textContent = `${filtered.length} ${filtered.length === 1 ? 'snippet' : 'snippets'} · Recently updated`;
   $('empty').hidden = filtered.length !== 0;
   $('empty').textContent = libraryError ? 'The saved library could not be opened. Import a backup from More options to recover it.' : snippets.length ? 'No matching snippets.' : 'No snippets yet. Add one to get started.';
   const list = $('list');

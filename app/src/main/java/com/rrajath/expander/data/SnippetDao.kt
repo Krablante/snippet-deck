@@ -7,7 +7,7 @@ import com.rrajath.expander.domain.TriggerUtils
 
 @Dao
 interface SnippetDao {
-    @Query("SELECT * FROM snippets ORDER BY updatedAt DESC")
+    @Query("SELECT * FROM snippets ORDER BY updatedAt DESC, trigger COLLATE NOCASE ASC")
     fun getAllSnippets(): Flow<List<Snippet>>
 
     @Query("SELECT * FROM snippets WHERE isEnabled = 1")

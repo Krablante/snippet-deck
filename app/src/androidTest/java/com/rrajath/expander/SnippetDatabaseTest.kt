@@ -10,6 +10,7 @@ import com.rrajath.expander.util.SnippetBackupCodec
 import android.net.Uri
 import java.io.File
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -17,6 +18,31 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class SnippetDatabaseTest {
+    @Test
+    fun libraryShowsRecentChangesWithStableTiesAfterRestore() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
+        try {
+            val dao = database.snippetDao()
+            val snippets = listOf(
+                Snippet(trigger = "!old", expansion = "Old", updatedAt = 10),
+                Snippet(trigger = "!Beta", expansion = "Tied", updatedAt = 20),
+                Snippet(trigger = "!alpha", expansion = "Tied", updatedAt = 20),
+                Snippet(trigger = "!new", expansion = "New", isEnabled = false, updatedAt = 30),
+            )
+            dao.replaceAll(snippets)
+            val expected = listOf("!new", "!alpha", "!Beta", "!old")
+            assertEquals(expected, dao.getAllSnippets().first().map { it.trigger })
+            dao.replaceAll(snippets.reversed())
+            assertEquals(expected, dao.getAllSnippets().first().map { it.trigger })
+            val old = dao.getAllSnippetsOnce().first { it.trigger == "!old" }
+            dao.saveChecked(old.copy(expansion = "Edited", updatedAt = 40), old)
+            assertEquals("!old", dao.getAllSnippets().first().first().trigger)
+        } finally {
+            database.close()
+        }
+    }
+
     @Test
     fun singleImportPreservesOtherRowsAndRejectsStaleOrAmbiguousMatches() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

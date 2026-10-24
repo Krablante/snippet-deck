@@ -164,7 +164,7 @@ fn snapshot_uses_the_field_names_read_by_the_editor() {
 #[tauri::command]
 fn snapshot(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Snapshot {
     Snapshot {
-        snippets: state.library.lock().unwrap().snippets.clone(),
+        snippets: state.library.lock().unwrap().recently_updated(),
         library_error: state.library_error.lock().unwrap().clone(),
         active: state.expander.enabled.load(Ordering::Relaxed),
         start_at_login: app.autolaunch().is_enabled().unwrap_or(false),

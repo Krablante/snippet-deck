@@ -34,6 +34,8 @@ On desktop, the editor closes while the expansion agent remains in the tray. Reo
 
 Save before closing the editor or app. Android keeps a draft across activity recreation while its editor destination remains open; drafts are not saved backups. With Drive connected, deleting a snippet also removes it from the other devices on their next sync.
 
+On every platform, the library shows recently updated snippets first. Creating, saving, or turning a snippet on or off moves it to the top; expanding it leaves the order alone. Equal update times are ordered by trigger. Search keeps this order, including after importing or syncing a library.
+
 ## Date and time
 
 Placeholders use the device's local time at insertion. Repeated placeholders in one expansion use the same instant.
